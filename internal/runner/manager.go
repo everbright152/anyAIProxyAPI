@@ -22,32 +22,35 @@ type RunnerResult struct {
 }
 
 type RunnerManager struct {
-	name            string
-	page            *chrome.Page
-	configs         map[string]Configuration
-	method          *method.Method
-	results         map[string]RunnerResult
-	debug           bool
-	debugConfigs    map[string]string
-	appConfigRunner config.AppConfigRunner
-	abort           bool
+	appConfigInstance config.AppConfigInstance
+	page              *chrome.Page
+	configs           map[string]Configuration
+	method            *method.Method
+	results           map[string]RunnerResult
+	debug             bool
+	debugConfigs      map[string]string
+	abort             bool
 }
 
-func NewRunnerManager(name string, appConfigRunner config.AppConfigRunner, page *chrome.Page, debug bool) (*RunnerManager, error) {
+func NewRunnerManager(appConfigInstance config.AppConfigInstance, page *chrome.Page, debug bool, results ...map[string]RunnerResult) (*RunnerManager, error) {
+	if len(results) == 0 {
+		results = []map[string]RunnerResult{make(map[string]RunnerResult)}
+	}
+
 	runner := &RunnerManager{
-		name:            name,
-		page:            page,
-		method:          method.NewMethod(page),
-		configs:         make(map[string]Configuration),
-		results:         make(map[string]RunnerResult),
-		debug:           debug,
-		debugConfigs:    make(map[string]string),
-		appConfigRunner: appConfigRunner,
+		appConfigInstance: appConfigInstance,
+		page:              page,
+		method:            method.NewMethod(page),
+		configs:           make(map[string]Configuration),
+		results:           results[0],
+		debug:             debug,
+		debugConfigs:      make(map[string]string),
 	}
 	err := runner.LoadConfigurations()
 	if err != nil {
 		return nil, err
 	}
+	runner.SetVariable("TextFilePromptMinSize", appConfigInstance.TextFilePromptMinSize, "int")
 	return runner, nil
 }
 
@@ -115,13 +118,13 @@ func (rm *RunnerManager) LoadConfiguration(name, path string) error {
 // LoadConfigurations scans all yaml files in the runner directory and calls LoadConfiguration method by filename
 func (rm *RunnerManager) LoadConfigurations() error {
 	// Scan all yaml and yml files in the runner directory
-	pattern := filepath.Join("runner", rm.name, "*.yaml")
+	pattern := filepath.Join("runner", rm.appConfigInstance.Name, "*.yaml")
 	yamlFiles, err := filepath.Glob(pattern)
 	if err != nil {
 		return fmt.Errorf("failed to scan yaml files: %v", err)
 	}
 
-	pattern = filepath.Join("runner", rm.name, "*.yml")
+	pattern = filepath.Join("runner", rm.appConfigInstance.Name, "*.yml")
 	ymlFiles, err := filepath.Glob(pattern)
 	if err != nil {
 		return fmt.Errorf("failed to scan yml files: %v", err)
@@ -138,11 +141,11 @@ func (rm *RunnerManager) LoadConfigurations() error {
 		name := strings.TrimSuffix(fileName, filepath.Ext(fileName))
 
 		switch name {
-		case rm.appConfigRunner.Init:
+		case rm.appConfigInstance.Runner.Init:
 			name = "init"
-		case rm.appConfigRunner.ChatCompletions:
+		case rm.appConfigInstance.Runner.ChatCompletions:
 			name = "chat_completions"
-		case rm.appConfigRunner.ContextCanceled:
+		case rm.appConfigInstance.Runner.ContextCanceled:
 			name = "context_canceled"
 		}
 
@@ -219,7 +222,7 @@ outLoop:
 		}
 
 		if workflows[executeIndex].Action == "DoRunner" {
-			r, err := NewRunnerManager(rm.name, rm.appConfigRunner, rm.page, rm.debug)
+			r, err := NewRunnerManager(rm.appConfigInstance, rm.page, rm.debug, rm.results)
 			if err != nil {
 				log.Error(err)
 				return err
@@ -315,6 +318,8 @@ outLoop:
 					doFailback = true
 				} else if rule == "FAILED" {
 					return fmt.Errorf("workflow failed")
+				} else if rule == "FINISH" {
+					return fmt.Errorf("workflow done")
 				} else if strings.HasPrefix(rule, "DO-WORKFLOW-IDX:") {
 					log.Debugf("DO-WORKFLOW-IDX: %s", rule[16:])
 					// Handle DO-WORKFLOW-IDX:1,2,3 cases
@@ -386,6 +391,8 @@ outLoop:
 					continue outLoop
 				} else if err.Error() == "workflow failed" {
 					return err
+				} else if err.Error() == "workflow done" {
+					return nil
 				}
 
 				// sub workflow failed, need to retry
@@ -503,7 +510,7 @@ func (rm *RunnerManager) executeMethod(obj any, methodName string, params []inte
 			input := strings.TrimSpace(reflect.ValueOf(params[i-1]).String())
 			if len(input) > 2 && input[0] == '#' && input[len(input)-1] == '#' {
 				if input == "#NEW_RUNNER#" {
-					newRm, _ := NewRunnerManager(rm.name, rm.appConfigRunner, rm.page, rm.debug)
+					newRm, _ := NewRunnerManager(rm.appConfigInstance, rm.page, rm.debug, rm.results)
 					args[paramIndex] = reflect.ValueOf(newRm)
 				} else {
 					input = input[1 : len(input)-1]

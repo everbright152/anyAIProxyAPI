@@ -2,26 +2,23 @@ package main
 
 import (
 	"bytes"
-	"context" // Will be needed for marshalling cookies
+	"context"
 	"encoding/json"
 	"fmt"
 	"github.com/chromedp/cdproto/cdp"
+	"github.com/chromedp/chromedp"
+	"github.com/luispater/anyAIProxyAPI/internal/api"
+	"github.com/luispater/anyAIProxyAPI/internal/browser/chrome"
+	chromedpmanager "github.com/luispater/anyAIProxyAPI/internal/browser/chrome"
+	"github.com/luispater/anyAIProxyAPI/internal/config"
 	"github.com/luispater/anyAIProxyAPI/internal/runner"
+	log "github.com/sirupsen/logrus"
 	"os"
 	"os/signal"
 	"path"
 	"path/filepath"
 	"syscall"
 	"time"
-
-	// For cdp.Node
-	"github.com/chromedp/chromedp" // For chromedp actions
-	"github.com/luispater/anyAIProxyAPI/internal/api"
-	"github.com/luispater/anyAIProxyAPI/internal/browser/chrome"
-	chromedpmanager "github.com/luispater/anyAIProxyAPI/internal/browser/chrome"
-	"github.com/luispater/anyAIProxyAPI/internal/config"
-	// "github.com/playwright-community/playwright-go" // Playwright no longer used
-	log "github.com/sirupsen/logrus"
 )
 
 type LogFormatter struct {
@@ -124,7 +121,7 @@ func main() {
 
 		pages[cfg.Instance[i].Name] = page // Store pageCtx
 
-		r, errNewRunnerManager := runner.NewRunnerManager(cfg.Instance[i].Name, cfg.Instance[i].Runner, page, cfg.Debug) // Pass pageCtx
+		r, errNewRunnerManager := runner.NewRunnerManager(cfg.Instance[i], page, cfg.Debug) // Pass pageCtx
 		if errNewRunnerManager != nil {
 			log.Error(errNewRunnerManager)
 		}

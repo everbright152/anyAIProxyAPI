@@ -46,23 +46,23 @@ func (cp *ChatProcessor) ProcessTask(ctx context.Context, task *RequestTask) *Ta
 		}
 	}
 
-	var appConfigRunner config.AppConfigRunner
+	var appConfigInstance config.AppConfigInstance
 	for i := 0; i < len(cp.appConfig.Instance); i++ {
 		if cp.appConfig.Instance[i].Name == instanceName {
-			appConfigRunner = cp.appConfig.Instance[i].Runner
+			appConfigInstance = cp.appConfig.Instance[i]
 		}
 	}
 
 	streamResult := gjson.Get(task.Request, "stream")
 	if streamResult.Type == gjson.True {
-		return cp.processStreamingTask(instanceName, appConfigRunner, ctx, task)
+		return cp.processStreamingTask(appConfigInstance, ctx, task)
 	} else {
-		return cp.processNonStreamingTask(instanceName, appConfigRunner, ctx, task)
+		return cp.processNonStreamingTask(appConfigInstance, ctx, task)
 	}
 }
 
 // processNonStreamingTask processes a non-streaming request
-func (cp *ChatProcessor) processNonStreamingTask(instanceName string, appConfigRunner config.AppConfigRunner, ctx context.Context, task *RequestTask) *TaskResponse {
+func (cp *ChatProcessor) processNonStreamingTask(appConfigInstance config.AppConfigInstance, ctx context.Context, task *RequestTask) *TaskResponse {
 
 	var fullResponse strings.Builder
 	var done bool
@@ -70,8 +70,8 @@ func (cp *ChatProcessor) processNonStreamingTask(instanceName string, appConfigR
 	errChannel := make(chan error)
 	streamChan := make(chan string, 100)
 
-	page := cp.pages[instanceName]
-	r, errNewRunnerManager := runner.NewRunnerManager(instanceName, appConfigRunner, page, cp.debug)
+	page := cp.pages[appConfigInstance.Name]
+	r, errNewRunnerManager := runner.NewRunnerManager(appConfigInstance, page, cp.debug)
 	go func() {
 		if errNewRunnerManager != nil {
 			log.Debug(errNewRunnerManager)
@@ -154,14 +154,14 @@ func (cp *ChatProcessor) processNonStreamingTask(instanceName string, appConfigR
 }
 
 // processStreamingTask processes a streaming request
-func (cp *ChatProcessor) processStreamingTask(instanceName string, appConfigRunner config.AppConfigRunner, ctx context.Context, task *RequestTask) *TaskResponse {
+func (cp *ChatProcessor) processStreamingTask(appConfigInstance config.AppConfigInstance, ctx context.Context, task *RequestTask) *TaskResponse {
 	// Create streaming channel
 	streamChan := make(chan string, 100)
 	channel := make(chan *adapter.AdapterResponse)
 	errChannel := make(chan error)
 
-	page := cp.pages[instanceName]
-	r, errNewRunnerManager := runner.NewRunnerManager(instanceName, appConfigRunner, page, cp.debug)
+	page := cp.pages[appConfigInstance.Name]
+	r, errNewRunnerManager := runner.NewRunnerManager(appConfigInstance, page, cp.debug)
 	go func() {
 		if errNewRunnerManager != nil {
 			log.Debug(errNewRunnerManager)

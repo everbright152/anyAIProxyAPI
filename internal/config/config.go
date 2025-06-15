@@ -26,14 +26,15 @@ type AppConfigRunner struct {
 	ContextCanceled string `yaml:"context_canceled"`
 }
 type AppConfigInstance struct {
-	Name      string                `yaml:"name"`
-	Adapter   string                `yaml:"adapter"`
-	ProxyURL  string                `yaml:"proxy-url"`
-	URL       string                `yaml:"url"`
-	SniffURL  []string              `yaml:"sniff-url"`
-	UserAgent string                `yaml:"user-agent,omitempty"`
-	Auth      AppConfigInstanceAuth `yaml:"auth"`
-	Runner    AppConfigRunner       `yaml:"runner"`
+	Name                  string                `yaml:"name"`
+	Adapter               string                `yaml:"adapter"`
+	ProxyURL              string                `yaml:"proxy-url"`
+	TextFilePromptMinSize int                   `yaml:"text-file-prompt-min-size"`
+	URL                   string                `yaml:"url"`
+	SniffURL              []string              `yaml:"sniff-url"`
+	UserAgent             string                `yaml:"user-agent,omitempty"`
+	Auth                  AppConfigInstanceAuth `yaml:"auth"`
+	Runner                AppConfigRunner       `yaml:"runner"`
 }
 
 type AppConfigInstanceAuth struct {

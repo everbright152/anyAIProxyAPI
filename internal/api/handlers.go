@@ -153,7 +153,7 @@ func (h *APIHandlers) ChatCompletions(c *gin.Context) {
 
 func (h *APIHandlers) handleContextCanceled(instanceIndex int) {
 	page := h.pages[h.appConfig.Instance[instanceIndex].Name]
-	r, err := runner.NewRunnerManager(h.appConfig.Instance[instanceIndex].Name, h.appConfig.Instance[instanceIndex].Runner, page, h.debug)
+	r, err := runner.NewRunnerManager(h.appConfig.Instance[instanceIndex], page, h.debug)
 	if err != nil {
 		log.Error(err)
 		return

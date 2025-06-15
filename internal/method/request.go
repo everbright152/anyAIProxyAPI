@@ -1,6 +1,7 @@
 package method
 
 import (
+	"encoding/base64"
 	"fmt"
 	log "github.com/sirupsen/logrus"
 	"github.com/tidwall/gjson"
@@ -417,4 +418,17 @@ func (m *Method) Tools(requestJson string) (bool, string, error) {
 		return true, "[" + strings.Join(arrayTools, ",") + "]", nil
 	}
 	return true, "[]", nil
+}
+
+func (m *Method) TextFilePrompt(requestJson string, maxSize int) (bool, []string, error) {
+	if maxSize > 0 {
+		prompt, err := m.BuildPrompt(requestJson, true)
+		if err != nil {
+			return false, []string{}, err
+		}
+		if len(prompt) > maxSize {
+			return true, []string{fmt.Sprintf("data:text/plain;base64,%s", base64.StdEncoding.EncodeToString([]byte(prompt)))}, nil
+		}
+	}
+	return false, []string{}, nil
 }
