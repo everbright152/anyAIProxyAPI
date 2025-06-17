@@ -10,3 +10,4 @@ docs/
 chromium/
 cert/ca.crt
 cert/ca.key
+*.log

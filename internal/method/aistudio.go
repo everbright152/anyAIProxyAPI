@@ -25,7 +25,6 @@ func (m *Method) ChooseModelByName(name, modelNameSelector string, modelCategory
 			chromedp.MouseClickNode(containerNode),
 		)
 		cancelClick() // Always call cancel
-		log.Info(err)
 		if err == nil {
 			// After clicking the container, model names might appear or update
 			modelNameElements, errGetElements := m.GetElements(modelNameSelector) // This now returns []*cdp.Node

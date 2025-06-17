@@ -13,6 +13,7 @@ type AppConfig struct {
 	Headless bool                `yaml:"headless"`
 	ApiPort  string              `yaml:"api-port"`
 	Instance []AppConfigInstance `yaml:"instance"`
+	LogFile  string              `yaml:"logfile"`
 }
 
 type AppConfigBrowser struct {

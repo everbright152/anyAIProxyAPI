@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"crypto/md5"
 	"encoding/json"
 	"fmt"
 	"github.com/chromedp/cdproto/cdp"
@@ -53,6 +54,14 @@ func main() {
 	if err != nil {
 		log.Fatalf("Load configuare error: %v", err)
 		return
+	}
+	if cfg.LogFile != "" {
+		f, errOpenFile := os.OpenFile(cfg.LogFile, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0644)
+		if errOpenFile != nil {
+			log.Fatalf("Failed to open log file: %v", errOpenFile)
+			return
+		}
+		log.SetOutput(f)
 	}
 	if !cfg.Debug {
 		log.SetLevel(log.InfoLevel)
@@ -224,6 +233,18 @@ func main() {
 								errMkdir := os.MkdirAll(authDirName, 0755)
 								if errMkdir != nil {
 									log.Debugf("Error creating directory %s for instance %s: %v", authDirName, instanceName, errMkdir)
+									continue
+								}
+							}
+
+							if _, errStat := os.Stat(mapCfg[instanceName].Auth.File); !os.IsNotExist(errStat) {
+								authData, errReadFile := os.ReadFile(mapCfg[instanceName].Auth.File)
+								if errReadFile != nil {
+									log.Debugf("Error reading auth info to file %s for instance %s: %v", mapCfg[instanceName].Auth.File, instanceName, errReadFile)
+									continue
+								}
+								if md5.Sum(authData) == md5.Sum(jsonData) {
+									log.Debugf("Auth info for instance %s is up to date, skipping write", instanceName)
 									continue
 								}
 							}
