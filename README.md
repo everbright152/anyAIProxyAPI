@@ -90,6 +90,10 @@ browser:
   user-data-dir: "/anyAIProxyAPI/user-data-dir"
 api-port: "2048"
 headless: false
+logfile: "any-ai-proxy.log"
+tokens: # Global tokens for API validation (optional)
+  - "global-token-1"
+  - "global-token-2"
 instance:
   - name: "gemini-aistudio"
     adapter: "gemini-aistudio"
@@ -104,6 +108,9 @@ instance:
       init: "init-system" # init runner
       chat_completions: "chat_completions" # chat_completions runner
       context_canceled: "context-canceled" # context canceled(client disconnect) runner
+    tokens: # Instance-specific tokens for API validation (optional)
+      - "gemini-token-3"
+      - "gemini-token-4"
   - name: "chatgpt"
     adapter: "chatgpt"
     proxy-url: ""
@@ -141,6 +148,7 @@ instance:
   - `user-data-dir`: User data directory
 - `api-port`: Port for the API server
 - `headless`: Run browser in headless mode
+- `tokens`: Global tokens for API validation (optional)
 - `instance`: Array of AI service instances to manage. Each instance has its own configuration
   - `name`: Instance name
   - `adapter`: Adapter name (corresponds to different AI services)
@@ -150,6 +158,7 @@ instance:
     - `file`: File to store authentication information
     - `check`: CSS selector to check login status
   - `runner`: Runner configuration. All runner files must be defined in a directory corresponding to the instance name
+  - `tokens`: Instance specific tokens for API validation (optional)
 
 For details on the runner file syntax, please refer to [runner.md](runner.md)
 
@@ -163,27 +172,43 @@ go run main.go
 
 The server will start on the configured port (default: 2048).
 
+### Management Web Interface
+
+#### Uploading Auth information for AI website
+```
+http://localhost:2048/v1/auth/upload
+```
+
 ### API Endpoints
 
 #### Chat Completions
 ```bash
-POST http://localhost:2048/v1/chat/completions
-Content-Type: application/json
-
-{
-  "model": "instance-name/model-name",
-  "messages": [
-    {
-      "role": "user",
-      "content": "Hello, how are you?"
-    }
-  ]
-}
+curl -X POST http://localhost:2048/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "instance-name/model-name",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Hello, how are you?"
+      }
+    ]
+  }'
 ```
 
 #### Headless Screenshot
 ```bash
 GET http://localhost:2048/screenshot?instance=instance-name
+```
+
+#### Auth Information Upload
+```bash
+POST http://localhost:2048/v1/auth/upload \
+  -H "Content-Type: application/json" \
+  -d '{
+  "name": "instance-name",
+  "auth": "{\"cookies\":[],\"local_storage\":{\"key\":\"value\"}}"
+}'
 ```
 
 #### Server Information
@@ -340,4 +365,4 @@ A: Please check if the Fingerprint Chromium path configuration is correct and en
 A: Set `debug: true` in `runner/main.yaml`, which will enable detailed debug logging.
 
 ### Q: Which operating systems are supported?
-A: Supports macOS, Linux, and Windows, but requires the corresponding platform's Fingerprint Chromium browser.
+A: Supports macOS, Linux, and Windows but requires the corresponding platform's Fingerprint Chromium browser.
