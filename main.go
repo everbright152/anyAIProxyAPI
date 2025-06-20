@@ -168,92 +168,94 @@ func main() {
 			log.Debugf("Cleanup completed. Exiting...")
 			os.Exit(0)
 		case <-time.After(5 * time.Second):
-			for instanceName, pageInstance := range pages { // p is pageCtxInstance
-				if mapCfg[instanceName].Auth.Check != "" {
-					hasCheckFlag := false
+			if !cfg.Headless {
+				for instanceName, pageInstance := range pages { // p is pageCtxInstance
+					if mapCfg[instanceName].Auth.Check != "" {
+						hasCheckFlag := false
 
-					var nodes []*cdp.Node
+						var nodes []*cdp.Node
 
-					timeoutCtx, cancel := context.WithTimeout(pageInstance.GetContext(), 1*time.Second)
-					err = chromedp.Run(timeoutCtx,
-						chromedp.Nodes(mapCfg[instanceName].Auth.Check, &nodes, chromedp.ByQueryAll),
-					)
-					cancel()
-					if err != nil {
-						if err.Error() != "context deadline exceeded" {
-							log.Errorf("Error checking auth selector '%s' for instance %s: %v", mapCfg[instanceName].Auth.Check, instanceName, err)
-						}
-					} else if len(nodes) == 0 {
-						log.Debugf("Auth.Check selector '%s' not found for instance %s. Skipping state save.", mapCfg[instanceName].Auth.Check, instanceName)
-					} else {
-						hasCheckFlag = true
-						log.Debugf("Auth.Check selector '%s' found %d elements for instance %s.", mapCfg[instanceName].Auth.Check, len(nodes), instanceName)
-					}
-
-					if hasCheckFlag {
-						saveState := false
-						if fileInfo, errStat := os.Stat(mapCfg[instanceName].Auth.File); os.IsNotExist(errStat) {
-							saveState = true
+						timeoutCtx, cancel := context.WithTimeout(pageInstance.GetContext(), 1*time.Second)
+						err = chromedp.Run(timeoutCtx,
+							chromedp.Nodes(mapCfg[instanceName].Auth.Check, &nodes, chromedp.ByQueryAll),
+						)
+						cancel()
+						if err != nil {
+							if err.Error() != "context deadline exceeded" {
+								log.Errorf("Error checking auth selector '%s' for instance %s: %v", mapCfg[instanceName].Auth.Check, instanceName, err)
+							}
+						} else if len(nodes) == 0 {
+							log.Debugf("Auth.Check selector '%s' not found for instance %s. Skipping state save.", mapCfg[instanceName].Auth.Check, instanceName)
 						} else {
-							lastModified := fileInfo.ModTime()
-							now := time.Now()
-							duration := now.Sub(lastModified)
-							if duration > 5*time.Minute {
-								saveState = true
-							}
+							hasCheckFlag = true
+							log.Debugf("Auth.Check selector '%s' found %d elements for instance %s.", mapCfg[instanceName].Auth.Check, len(nodes), instanceName)
 						}
 
-						if saveState {
-							cookies, errGetCookies := chromedpmanager.GetCookies(pageInstance.GetContext())
-							localStorages, errGetLocalStorages := chromedpmanager.GetLocalStorages(pageInstance.GetContext())
-							// localStorages, errGetLocalStorages := pageInstance.GetLocalStorages()
-							if errGetCookies != nil {
-								log.Debugf("Error getting cookies for instance %s: %v", instanceName, errGetCookies)
-								continue
-							}
-							if errGetLocalStorages != nil {
-								log.Debugf("Error getting local storages for instance %s: %v", instanceName, errGetLocalStorages)
-								continue
-							}
-
-							jsonData, errMarshalIndent := json.MarshalIndent(map[string]interface{}{"cookies": cookies, "local_storage": localStorages}, "", "  ")
-							if errMarshalIndent != nil {
-								log.Debugf("Error marshalling cookies to JSON for instance %s: %v", instanceName, errMarshalIndent)
-								continue
-							}
-
-							// Ensure the directory exists
-							authAbsPath, errAbs := filepath.Abs(mapCfg[instanceName].Auth.File)
-							if errAbs != nil {
-								log.Debugf("Error getting absolute path for auth file for instance %s: %v", instanceName, errAbs)
-								continue
-							}
-							authDirName := filepath.Dir(authAbsPath)
-							if _, errStat := os.Stat(authDirName); os.IsNotExist(errStat) {
-								errMkdir := os.MkdirAll(authDirName, 0755)
-								if errMkdir != nil {
-									log.Debugf("Error creating directory %s for instance %s: %v", authDirName, instanceName, errMkdir)
-									continue
-								}
-							}
-
-							if _, errStat := os.Stat(mapCfg[instanceName].Auth.File); !os.IsNotExist(errStat) {
-								authData, errReadFile := os.ReadFile(mapCfg[instanceName].Auth.File)
-								if errReadFile != nil {
-									log.Debugf("Error reading auth info to file %s for instance %s: %v", mapCfg[instanceName].Auth.File, instanceName, errReadFile)
-									continue
-								}
-								if md5.Sum(authData) == md5.Sum(jsonData) {
-									log.Debugf("Auth info for instance %s is up to date, skipping write", instanceName)
-									continue
-								}
-							}
-
-							errWriteFile := os.WriteFile(mapCfg[instanceName].Auth.File, jsonData, 0644)
-							if errWriteFile != nil {
-								log.Debugf("Error writing auth info to file %s for instance %s: %v", mapCfg[instanceName].Auth.File, instanceName, errWriteFile)
+						if hasCheckFlag {
+							saveState := false
+							if fileInfo, errStat := os.Stat(mapCfg[instanceName].Auth.File); os.IsNotExist(errStat) {
+								saveState = true
 							} else {
-								log.Debugf("Successfully wrote auth info to file %s for instance %s", mapCfg[instanceName].Auth.File, instanceName)
+								lastModified := fileInfo.ModTime()
+								now := time.Now()
+								duration := now.Sub(lastModified)
+								if duration > 5*time.Minute {
+									saveState = true
+								}
+							}
+
+							if saveState {
+								cookies, errGetCookies := chromedpmanager.GetCookies(pageInstance.GetContext())
+								localStorages, errGetLocalStorages := chromedpmanager.GetLocalStorages(pageInstance.GetContext())
+								// localStorages, errGetLocalStorages := pageInstance.GetLocalStorages()
+								if errGetCookies != nil {
+									log.Debugf("Error getting cookies for instance %s: %v", instanceName, errGetCookies)
+									continue
+								}
+								if errGetLocalStorages != nil {
+									log.Debugf("Error getting local storages for instance %s: %v", instanceName, errGetLocalStorages)
+									continue
+								}
+
+								jsonData, errMarshalIndent := json.MarshalIndent(map[string]interface{}{"cookies": cookies, "local_storage": localStorages}, "", "  ")
+								if errMarshalIndent != nil {
+									log.Debugf("Error marshalling cookies to JSON for instance %s: %v", instanceName, errMarshalIndent)
+									continue
+								}
+
+								// Ensure the directory exists
+								authAbsPath, errAbs := filepath.Abs(mapCfg[instanceName].Auth.File)
+								if errAbs != nil {
+									log.Debugf("Error getting absolute path for auth file for instance %s: %v", instanceName, errAbs)
+									continue
+								}
+								authDirName := filepath.Dir(authAbsPath)
+								if _, errStat := os.Stat(authDirName); os.IsNotExist(errStat) {
+									errMkdir := os.MkdirAll(authDirName, 0755)
+									if errMkdir != nil {
+										log.Debugf("Error creating directory %s for instance %s: %v", authDirName, instanceName, errMkdir)
+										continue
+									}
+								}
+
+								if _, errStat := os.Stat(mapCfg[instanceName].Auth.File); !os.IsNotExist(errStat) {
+									authData, errReadFile := os.ReadFile(mapCfg[instanceName].Auth.File)
+									if errReadFile != nil {
+										log.Debugf("Error reading auth info to file %s for instance %s: %v", mapCfg[instanceName].Auth.File, instanceName, errReadFile)
+										continue
+									}
+									if md5.Sum(authData) == md5.Sum(jsonData) {
+										log.Debugf("Auth info for instance %s is up to date, skipping write", instanceName)
+										continue
+									}
+								}
+
+								errWriteFile := os.WriteFile(mapCfg[instanceName].Auth.File, jsonData, 0644)
+								if errWriteFile != nil {
+									log.Debugf("Error writing auth info to file %s for instance %s: %v", mapCfg[instanceName].Auth.File, instanceName, errWriteFile)
+								} else {
+									log.Debugf("Successfully wrote auth info to file %s for instance %s", mapCfg[instanceName].Auth.File, instanceName)
+								}
 							}
 						}
 					}
