@@ -1,6 +1,7 @@
 package api
 
 import (
+	"encoding/json"
 	"fmt"
 	"github.com/chromedp/chromedp"
 	"github.com/luispater/anyAIProxyAPI/internal/browser/chrome"
@@ -9,6 +10,8 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/tidwall/gjson"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -35,6 +38,48 @@ func NewAPIHandlers(appConfig *config.AppConfig, queue *RequestQueue, pages map[
 		debug:     debug,
 		appConfig: appConfig,
 	}
+}
+
+// validateAPIToken validates the API token for the given instance
+func (h *APIHandlers) validateAPIToken(c *gin.Context, instanceName string) bool {
+	// Get token from Authorization header
+	authHeader := c.GetHeader("Authorization")
+	if authHeader == "" {
+		return false
+	}
+
+	// Extract token from "Bearer <token>" format
+	var token string
+	if strings.HasPrefix(authHeader, "Bearer ") {
+		token = strings.TrimPrefix(authHeader, "Bearer ")
+	} else {
+		token = authHeader
+	}
+
+	if token == "" {
+		return false
+	}
+
+	// Check global tokens first
+	for _, globalToken := range h.appConfig.Tokens {
+		if globalToken == token {
+			return true
+		}
+	}
+
+	// Check instance-specific tokens
+	for _, instance := range h.appConfig.Instance {
+		if instance.Name == instanceName {
+			for _, instanceToken := range instance.Tokens {
+				if instanceToken == token {
+					return true
+				}
+			}
+			break
+		}
+	}
+
+	return false
 }
 
 func (h *APIHandlers) TakeScreenshot(c *gin.Context) {
@@ -75,6 +120,28 @@ func (h *APIHandlers) ChatCompletions(c *gin.Context) {
 	modelResult := gjson.GetBytes(rawJson, "model")
 	if modelResult.Type == gjson.String {
 		instanceName = strings.Split(modelResult.String(), "/")[0]
+	}
+
+	// Validate API token if tokens are configured
+	hasGlobalTokens := len(h.appConfig.Tokens) > 0
+	hasInstanceTokens := false
+	for _, instance := range h.appConfig.Instance {
+		if instance.Name == instanceName && len(instance.Tokens) > 0 {
+			hasInstanceTokens = true
+			break
+		}
+	}
+
+	if hasGlobalTokens || hasInstanceTokens {
+		if !h.validateAPIToken(c, instanceName) {
+			c.JSON(http.StatusUnauthorized, ErrorResponse{
+				Error: ErrorDetail{
+					Message: "Invalid or missing API token",
+					Type:    "authentication_error",
+				},
+			})
+			return
+		}
 	}
 
 	instanceIndex := 0
@@ -269,4 +336,172 @@ func (h *APIHandlers) handleStreamingResponse(instanceIndex int, c *gin.Context,
 			flusher.Flush()
 		}
 	}
+}
+
+// BrowserReload handles the /v1/browser/reload endpoint
+func (h *APIHandlers) BrowserReload(c *gin.Context) {
+	instanceName, ok := c.GetQuery("name")
+	if !ok || instanceName == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Missing required parameter: name", "code": 400})
+		return
+	}
+
+	// Find the instance configuration
+	var instanceConfig *config.AppConfigInstance
+	for i := range h.appConfig.Instance {
+		if h.appConfig.Instance[i].Name == instanceName {
+			instanceConfig = &h.appConfig.Instance[i]
+			break
+		}
+	}
+
+	if instanceConfig == nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": fmt.Sprintf("Instance '%s' not found", instanceName), "code": 404})
+		return
+	}
+
+	// Get the page for this instance
+	page, exists := h.pages[instanceName]
+	if !exists {
+		c.JSON(http.StatusNotFound, gin.H{"error": fmt.Sprintf("Page for instance '%s' not found", instanceName), "code": 404})
+		return
+	}
+
+	// Navigate to the instance URL
+	pageCtx := page.GetContext()
+	if err := chromedp.Run(pageCtx, chromedp.Navigate(instanceConfig.URL)); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to reload page: %v", err), "code": 500})
+		return
+	}
+
+	log.Debugf("Successfully reloaded page for instance '%s' to URL: %s", instanceName, instanceConfig.URL)
+	c.JSON(http.StatusOK, gin.H{"message": "Page reloaded successfully"})
+}
+
+// AuthUpload handles the /v1/auth/upload endpoint
+func (h *APIHandlers) AuthUpload(c *gin.Context) {
+	var requestData struct {
+		Name string `json:"name" binding:"required"`
+		Auth string `json:"auth" binding:"required"`
+	}
+
+	if err := c.ShouldBindJSON(&requestData); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("Invalid request data: %v", err), "code": 400})
+		return
+	}
+
+	// Find the instance configuration
+	var instanceConfig *config.AppConfigInstance
+	for i := range h.appConfig.Instance {
+		if h.appConfig.Instance[i].Name == requestData.Name {
+			instanceConfig = &h.appConfig.Instance[i]
+			break
+		}
+	}
+
+	if instanceConfig == nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": fmt.Sprintf("Instance '%s' not found", requestData.Name), "code": 404})
+		return
+	}
+
+	// Validate the auth JSON format
+	var authInfo chrome.AuthInfo
+	if err := json.Unmarshal([]byte(requestData.Auth), &authInfo); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("Invalid auth JSON format: %v", err), "code": 400})
+		return
+	}
+
+	// Ensure the auth directory exists
+	authAbsPath, err := filepath.Abs(instanceConfig.Auth.File)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to get absolute path: %v", err), "code": 500})
+		return
+	}
+
+	authDirName := filepath.Dir(authAbsPath)
+	if _, err = os.Stat(authDirName); os.IsNotExist(err) {
+		if err = os.MkdirAll(authDirName, 0755); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to create auth directory: %v", err), "code": 500})
+			return
+		}
+	}
+
+	// Write the auth info to file
+	if err = os.WriteFile(instanceConfig.Auth.File, []byte(requestData.Auth), 0644); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to write auth file: %v", err), "code": 500})
+		return
+	}
+
+	// Get the page for this instance
+	page, exists := h.pages[instanceConfig.Name]
+	if !exists {
+		c.JSON(http.StatusNotFound, gin.H{"error": fmt.Sprintf("Page for instance '%s' not found", instanceConfig.Name), "code": 404})
+		return
+	}
+
+	// Navigate to the instance URL
+	pageCtx := page.GetContext()
+
+	err = chrome.LoadAuthInfo(pageCtx, instanceConfig.URL, instanceConfig.Auth.File)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to load auth info: %v", err), "code": 500})
+		return
+	}
+
+	if err = chromedp.Run(pageCtx, chromedp.Navigate(instanceConfig.URL)); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to reload page: %v", err), "code": 500})
+		return
+	}
+
+	log.Debugf("Successfully uploaded auth info for instance '%s' to file: %s", requestData.Name, instanceConfig.Auth.File)
+	c.JSON(http.StatusOK, gin.H{"message": "Auth info uploaded successfully"})
+}
+
+// AuthDownload handles the /v1/auth/download endpoint
+func (h *APIHandlers) AuthDownload(c *gin.Context) {
+	instanceName, ok := c.GetQuery("name")
+	if !ok || instanceName == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Missing required parameter: name", "code": 400})
+		return
+	}
+
+	// Find the instance configuration
+	var instanceConfig *config.AppConfigInstance
+	for i := range h.appConfig.Instance {
+		if h.appConfig.Instance[i].Name == instanceName {
+			instanceConfig = &h.appConfig.Instance[i]
+			break
+		}
+	}
+
+	if instanceConfig == nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": fmt.Sprintf("Instance '%s' not found", instanceName), "code": 404})
+		return
+	}
+
+	// Check if auth file exists
+	if _, err := os.Stat(instanceConfig.Auth.File); os.IsNotExist(err) {
+		c.JSON(http.StatusNotFound, gin.H{"error": fmt.Sprintf("Auth file not found for instance '%s'", instanceName), "code": 404})
+		return
+	}
+
+	// Read the auth file
+	authData, err := os.ReadFile(instanceConfig.Auth.File)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to read auth file: %v", err), "code": 500})
+		return
+	}
+
+	// Validate the auth JSON format
+	var authInfo chrome.AuthInfo
+	if err = json.Unmarshal(authData, &authInfo); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Invalid auth file format: %v", err), "code": 500})
+		return
+	}
+
+	log.Debugf("Successfully downloaded auth info for instance '%s' from file: %s", instanceName, instanceConfig.Auth.File)
+
+	// Return the auth info as JSON
+	c.Header("Content-Type", "application/json")
+	c.JSON(http.StatusOK, authInfo)
 }

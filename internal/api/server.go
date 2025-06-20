@@ -78,6 +78,13 @@ func (s *Server) setupRoutes() {
 	v1 := s.engine.Group("/v1")
 	{
 		v1.POST("/chat/completions", s.handlers.ChatCompletions)
+
+		// Browser management routes
+		v1.GET("/browser/reload", s.handlers.BrowserReload)
+
+		// Auth management routes
+		v1.POST("/auth/upload", s.handlers.AuthUpload)
+		v1.GET("/auth/download", s.handlers.AuthDownload)
 	}
 
 	// Root endpoint
@@ -87,6 +94,9 @@ func (s *Server) setupRoutes() {
 			"version": "1.0.0",
 			"endpoints": []string{
 				"POST /v1/chat/completions",
+				"GET /v1/browser/reload",
+				"POST /v1/auth/upload",
+				"GET /v1/auth/download",
 			},
 		})
 	})

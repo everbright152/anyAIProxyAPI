@@ -14,6 +14,7 @@ type AppConfig struct {
 	ApiPort  string              `yaml:"api-port"`
 	Instance []AppConfigInstance `yaml:"instance"`
 	LogFile  string              `yaml:"logfile"`
+	Tokens   []string            `yaml:"tokens,omitempty"` // Global tokens for API validation
 }
 
 type AppConfigBrowser struct {
@@ -36,6 +37,7 @@ type AppConfigInstance struct {
 	UserAgent             string                `yaml:"user-agent,omitempty"`
 	Auth                  AppConfigInstanceAuth `yaml:"auth"`
 	Runner                AppConfigRunner       `yaml:"runner"`
+	Tokens                []string              `yaml:"tokens,omitempty"` // Instance-specific tokens for API validation
 }
 
 type AppConfigInstanceAuth struct {
