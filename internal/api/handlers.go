@@ -505,3 +505,44 @@ func (h *APIHandlers) AuthDownload(c *gin.Context) {
 	c.Header("Content-Type", "application/json")
 	c.JSON(http.StatusOK, authInfo)
 }
+
+// AuthUploadPage handles the GET /v1/auth/upload endpoint to serve the upload page
+func (h *APIHandlers) AuthUploadPage(c *gin.Context) {
+	// Try to find the HTML file in different possible locations
+	possiblePaths := []string{
+		filepath.Join("internal", "html", "auth_upload.html"),
+		filepath.Join("..", "internal", "html", "auth_upload.html"),
+		"auth_upload.html", // fallback for tests
+	}
+
+	var htmlContent []byte
+	var err error
+
+	for _, htmlPath := range possiblePaths {
+		htmlContent, err = os.ReadFile(htmlPath)
+		if err == nil {
+			break
+		}
+	}
+
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to load upload page: %v", err), "code": 500})
+		return
+	}
+
+	// Serve the HTML content
+	c.Header("Content-Type", "text/html; charset=utf-8")
+	c.String(http.StatusOK, string(htmlContent))
+}
+
+// AuthInstances handles the GET /v1/auth/instances endpoint to return available instances
+func (h *APIHandlers) AuthInstances(c *gin.Context) {
+	var instances []string
+	for _, instance := range h.appConfig.Instance {
+		instances = append(instances, instance.Name)
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"instances": instances,
+	})
+}

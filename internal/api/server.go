@@ -83,8 +83,10 @@ func (s *Server) setupRoutes() {
 		v1.GET("/browser/reload", s.handlers.BrowserReload)
 
 		// Auth management routes
+		v1.GET("/auth/upload", s.handlers.AuthUploadPage)
 		v1.POST("/auth/upload", s.handlers.AuthUpload)
 		v1.GET("/auth/download", s.handlers.AuthDownload)
+		v1.GET("/auth/instances", s.handlers.AuthInstances)
 	}
 
 	// Root endpoint
@@ -95,8 +97,10 @@ func (s *Server) setupRoutes() {
 			"endpoints": []string{
 				"POST /v1/chat/completions",
 				"GET /v1/browser/reload",
+				"GET /v1/auth/upload",
 				"POST /v1/auth/upload",
 				"GET /v1/auth/download",
+				"GET /v1/auth/instances",
 			},
 		})
 	})

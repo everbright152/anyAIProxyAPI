@@ -1,0 +1,425 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Auth Upload - Any AI Proxy API</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .container {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+            padding: 40px;
+            max-width: 500px;
+            width: 100%;
+            text-align: center;
+        }
+
+        .header {
+            margin-bottom: 30px;
+        }
+
+        .header h1 {
+            color: #333;
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+            font-weight: 700;
+        }
+
+        .header p {
+            color: #666;
+            font-size: 1.1rem;
+            line-height: 1.6;
+        }
+
+        .form-group {
+            margin-bottom: 25px;
+            text-align: left;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            color: #333;
+            font-weight: 600;
+            font-size: 1rem;
+        }
+
+        .form-control {
+            width: 100%;
+            padding: 12px 16px;
+            border: 2px solid #e1e5e9;
+            border-radius: 10px;
+            font-size: 1rem;
+            transition: all 0.3s ease;
+            background-color: #f8f9fa;
+        }
+
+        .form-control:focus {
+            outline: none;
+            border-color: #667eea;
+            background-color: white;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        .file-upload-wrapper {
+            position: relative;
+            display: inline-block;
+            width: 100%;
+        }
+
+        .file-upload-input {
+            position: absolute;
+            opacity: 0;
+            width: 100%;
+            height: 100%;
+            cursor: pointer;
+        }
+
+        .file-upload-button {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 15px 20px;
+            border: 2px dashed #667eea;
+            border-radius: 10px;
+            background-color: #f8f9ff;
+            color: #667eea;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            min-height: 60px;
+        }
+
+        .file-upload-button:hover {
+            background-color: #667eea;
+            color: white;
+            border-style: solid;
+        }
+
+        .file-upload-button.has-file {
+            background-color: #d4edda;
+            border-color: #28a745;
+            color: #155724;
+        }
+
+        .upload-icon {
+            margin-right: 10px;
+            font-size: 1.2rem;
+        }
+
+        .submit-button {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            border-radius: 10px;
+            font-size: 1.1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            width: 100%;
+            margin-top: 20px;
+        }
+
+        .submit-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(102, 126, 234, 0.3);
+        }
+
+        .submit-button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+
+        .message {
+            margin-top: 20px;
+            padding: 12px;
+            border-radius: 8px;
+            font-weight: 500;
+            display: none;
+        }
+
+        .message.success {
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+
+        .message.error {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+
+        .loading {
+            display: none;
+            margin-top: 20px;
+        }
+
+        .spinner {
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #667eea;
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .footer {
+            margin-top: 30px;
+            padding-top: 20px;
+            border-top: 1px solid #e1e5e9;
+            color: #666;
+            font-size: 0.9rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🔐 Auth Upload</h1>
+            <p>Upload authentication information for AI instances</p>
+        </div>
+
+        <form id="uploadForm">
+            <div class="form-group">
+                <label for="instanceSelect">Select AI Instance:</label>
+                <select id="instanceSelect" class="form-control" required>
+                    <option value="">Loading instances...</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label for="authFile">Authentication JSON File:</label>
+                <div class="file-upload-wrapper">
+                    <input type="file" id="authFile" class="file-upload-input" accept=".json" required>
+                    <div class="file-upload-button">
+                        <span class="upload-icon">📁</span>
+                        <span class="upload-text">Choose JSON file or drag & drop here</span>
+                    </div>
+                </div>
+            </div>
+
+            <button type="submit" class="submit-button" id="submitButton" disabled>
+                Upload Authentication
+            </button>
+        </form>
+
+        <div class="loading" id="loading">
+            <div class="spinner"></div>
+            <p>Uploading...</p>
+        </div>
+
+        <div class="message" id="message"></div>
+
+        <div class="footer">
+            <p>Any AI Proxy API - Authentication Management</p>
+        </div>
+    </div>
+
+    <script>
+        // Load instances on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            loadInstances();
+            setupFileUpload();
+            setupForm();
+        });
+
+        async function loadInstances() {
+            try {
+                const response = await fetch('/v1/auth/instances');
+                const data = await response.json();
+                
+                const select = document.getElementById('instanceSelect');
+                select.innerHTML = '<option value="">Select an instance...</option>';
+                
+                data.instances.forEach(instance => {
+                    const option = document.createElement('option');
+                    option.value = instance;
+                    option.textContent = instance;
+                    select.appendChild(option);
+                });
+                
+                updateSubmitButton();
+            } catch (error) {
+                console.error('Error loading instances:', error);
+                showMessage('Failed to load instances. Please refresh the page.', 'error');
+            }
+        }
+
+        function setupFileUpload() {
+            const fileInput = document.getElementById('authFile');
+            const uploadButton = document.querySelector('.file-upload-button');
+            const uploadText = document.querySelector('.upload-text');
+
+            fileInput.addEventListener('change', function() {
+                if (this.files.length > 0) {
+                    const fileName = this.files[0].name;
+                    uploadText.textContent = `Selected: ${fileName}`;
+                    uploadButton.classList.add('has-file');
+                } else {
+                    uploadText.textContent = 'Choose JSON file or drag & drop here';
+                    uploadButton.classList.remove('has-file');
+                }
+                updateSubmitButton();
+            });
+
+            // Drag and drop functionality
+            uploadButton.addEventListener('dragover', function(e) {
+                e.preventDefault();
+                this.style.backgroundColor = '#667eea';
+                this.style.color = 'white';
+            });
+
+            uploadButton.addEventListener('dragleave', function(e) {
+                e.preventDefault();
+                this.style.backgroundColor = '';
+                this.style.color = '';
+            });
+
+            uploadButton.addEventListener('drop', function(e) {
+                e.preventDefault();
+                this.style.backgroundColor = '';
+                this.style.color = '';
+                
+                const files = e.dataTransfer.files;
+                if (files.length > 0 && files[0].type === 'application/json') {
+                    fileInput.files = files;
+                    fileInput.dispatchEvent(new Event('change'));
+                }
+            });
+        }
+
+        function setupForm() {
+            const form = document.getElementById('uploadForm');
+            const instanceSelect = document.getElementById('instanceSelect');
+            
+            instanceSelect.addEventListener('change', updateSubmitButton);
+            
+            form.addEventListener('submit', async function(e) {
+                e.preventDefault();
+                await uploadAuth();
+            });
+        }
+
+        function updateSubmitButton() {
+            const instanceSelect = document.getElementById('instanceSelect');
+            const fileInput = document.getElementById('authFile');
+            const submitButton = document.getElementById('submitButton');
+            
+            const hasInstance = instanceSelect.value !== '';
+            const hasFile = fileInput.files.length > 0;
+            
+            submitButton.disabled = !(hasInstance && hasFile);
+        }
+
+        async function uploadAuth() {
+            const instanceSelect = document.getElementById('instanceSelect');
+            const fileInput = document.getElementById('authFile');
+            const loading = document.getElementById('loading');
+            const submitButton = document.getElementById('submitButton');
+            
+            if (!instanceSelect.value || !fileInput.files[0]) {
+                showMessage('Please select an instance and choose a file.', 'error');
+                return;
+            }
+
+            try {
+                // Show loading
+                loading.style.display = 'block';
+                submitButton.disabled = true;
+                hideMessage();
+
+                // Read file content
+                const file = fileInput.files[0];
+                const fileContent = await readFileAsText(file);
+                
+                // Validate JSON
+                let authData;
+                try {
+                    authData = JSON.parse(fileContent);
+                } catch (error) {
+                    throw new Error('Invalid JSON file format');
+                }
+
+                // Upload to server
+                const response = await fetch('/v1/auth/upload', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        name: instanceSelect.value,
+                        auth: fileContent
+                    })
+                });
+
+                const result = await response.json();
+
+                if (response.ok) {
+                    showMessage('Authentication uploaded successfully!', 'success');
+                    // Reset form
+                    instanceSelect.value = '';
+                    fileInput.value = '';
+                    document.querySelector('.upload-text').textContent = 'Choose JSON file or drag & drop here';
+                    document.querySelector('.file-upload-button').classList.remove('has-file');
+                } else {
+                    throw new Error(result.error || 'Upload failed');
+                }
+            } catch (error) {
+                console.error('Upload error:', error);
+                showMessage(`Upload failed: ${error.message}`, 'error');
+            } finally {
+                loading.style.display = 'none';
+                updateSubmitButton();
+            }
+        }
+
+        function readFileAsText(file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = e => resolve(e.target.result);
+                reader.onerror = e => reject(new Error('Failed to read file'));
+                reader.readAsText(file);
+            });
+        }
+
+        function showMessage(text, type) {
+            const message = document.getElementById('message');
+            message.textContent = text;
+            message.className = `message ${type}`;
+            message.style.display = 'block';
+        }
+
+        function hideMessage() {
+            const message = document.getElementById('message');
+            message.style.display = 'none';
+        }
+    </script>
+</body>
+</html>
