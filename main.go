@@ -90,55 +90,119 @@ func main() {
 
 	log.Info("Starting Any AI Proxy API application...")
 
-	// Create a new browser manager
-	browserManager, errNewManager := chromedpmanager.NewManager(cfg)
-	if errNewManager != nil {
-		log.Fatalf("could not create browser manager: %v", errNewManager)
-		return
-	}
-	defer func() {
-		log.Debugf("Closing browser manager...")
-		if err = browserManager.Close(); err != nil {
-			log.Debugf("Error closing browser manager: %v", err)
+	if cfg.InstanceAlone {
+		browserManagers := make([]*chromedpmanager.Manager, 0)
+		defer func() {
+			log.Debugf("Closing browser manager...")
+			for i := 0; i < len(browserManagers); i++ {
+				if err = browserManagers[i].Close(); err != nil {
+					log.Debugf("Error closing browser manager: %v", err)
+				}
+			}
+			log.Debugf("Browser manager closed.")
+		}()
+
+		baseUserDataDir := cfg.Browser.UserDataDir
+		for i := 0; i < len(cfg.Instance); i++ {
+			instanceCfg := *cfg
+			instanceCfg.Browser.UserDataDir = path.Join(baseUserDataDir, cfg.Instance[i].Name)
+			instanceCfg.Instance = []config.AppConfigInstance{cfg.Instance[i]}
+
+			// Create a new browser manager
+			browserManager, errNewManager := chromedpmanager.NewManager(&instanceCfg)
+			if errNewManager != nil {
+				log.Fatalf("could not create browser manager: %v", errNewManager)
+				return
+			}
+			browserManagers = append(browserManagers, browserManager)
+
+			// Launch the browser and create a context
+			if err = browserManager.LaunchBrowserAndContext(); err != nil {
+				log.Fatalf("could not launch browser and context: %v", err)
+			}
+			log.Debugf("Browser and context launched successfully.")
+
+			log.Debugf("Creating a new page...")
+			page, errNewPage := browserManager.NewPage(cfg.Instance[i].URL, cfg.Instance[i].Adapter, cfg.Instance[i].Auth.File) // Modified to use pageCtx and cancelPage
+			if errNewPage != nil {
+				log.Fatalf("could not create page: %v", errNewPage)
+				return
+			}
+
+			var currentURL string
+			err = chromedp.Run(page.GetContext(), chromedp.Location(&currentURL))
+			if err != nil {
+				log.Warnf("could not get current URL for instance %s: %v", cfg.Instance[i].Name, err)
+				// Continue execution even if URL fetch fails, as navigation might have succeeded.
+			} else {
+				log.Debugf("Successfully navigated instance %s to: %s. Page loaded.", cfg.Instance[i].Name, currentURL)
+			}
+
+			pages[cfg.Instance[i].Name] = page // Store pageCtx
+
+			r, errNewRunnerManager := runner.NewRunnerManager(cfg.Instance[i], page, cfg.Debug) // Pass pageCtx
+			if errNewRunnerManager != nil {
+				log.Error(errNewRunnerManager)
+			}
+			err = r.Run("init")
+			if err != nil {
+				log.Debug(err)
+			}
+			log.Debugf("all of the init system rules are executed.")
 		}
-		log.Debugf("Browser manager closed.")
-	}()
-
-	// Launch the browser and create a context
-	if err = browserManager.LaunchBrowserAndContext(); err != nil {
-		log.Fatalf("could not launch browser and context: %v", err)
-	}
-
-	log.Debugf("Browser and context launched successfully.")
-
-	for i := 0; i < len(cfg.Instance); i++ {
-		log.Debugf("Creating a new page...")
-		page, errNewPage := browserManager.NewPage(cfg.Instance[i].URL, cfg.Instance[i].Adapter, cfg.Instance[i].Auth.File) // Modified to use pageCtx and cancelPage
-		if errNewPage != nil {
-			log.Fatalf("could not create page: %v", errNewPage)
+	} else {
+		// Create a new browser manager
+		baseUserDataDir := cfg.Browser.UserDataDir
+		cfg.Browser.UserDataDir = path.Join(baseUserDataDir, "shared")
+		browserManager, errNewManager := chromedpmanager.NewManager(cfg)
+		if errNewManager != nil {
+			log.Fatalf("could not create browser manager: %v", errNewManager)
 			return
 		}
+		defer func() {
+			log.Debugf("Closing browser manager...")
+			if err = browserManager.Close(); err != nil {
+				log.Debugf("Error closing browser manager: %v", err)
+			}
+			log.Debugf("Browser manager closed.")
+		}()
 
-		var currentURL string
-		err = chromedp.Run(page.GetContext(), chromedp.Location(&currentURL))
-		if err != nil {
-			log.Warnf("could not get current URL for instance %s: %v", cfg.Instance[i].Name, err)
-			// Continue execution even if URL fetch fails, as navigation might have succeeded.
-		} else {
-			log.Debugf("Successfully navigated instance %s to: %s. Page loaded.", cfg.Instance[i].Name, currentURL)
+		// Launch the browser and create a context
+		if err = browserManager.LaunchBrowserAndContext(); err != nil {
+			log.Fatalf("could not launch browser and context: %v", err)
 		}
 
-		pages[cfg.Instance[i].Name] = page // Store pageCtx
+		log.Debugf("Browser and context launched successfully.")
 
-		r, errNewRunnerManager := runner.NewRunnerManager(cfg.Instance[i], page, cfg.Debug) // Pass pageCtx
-		if errNewRunnerManager != nil {
-			log.Error(errNewRunnerManager)
+		for i := 0; i < len(cfg.Instance); i++ {
+			log.Debugf("Creating a new page...")
+			page, errNewPage := browserManager.NewPage(cfg.Instance[i].URL, cfg.Instance[i].Adapter, cfg.Instance[i].Auth.File) // Modified to use pageCtx and cancelPage
+			if errNewPage != nil {
+				log.Fatalf("could not create page: %v", errNewPage)
+				return
+			}
+
+			var currentURL string
+			err = chromedp.Run(page.GetContext(), chromedp.Location(&currentURL))
+			if err != nil {
+				log.Warnf("could not get current URL for instance %s: %v", cfg.Instance[i].Name, err)
+				// Continue execution even if URL fetch fails, as navigation might have succeeded.
+			} else {
+				log.Debugf("Successfully navigated instance %s to: %s. Page loaded.", cfg.Instance[i].Name, currentURL)
+			}
+
+			pages[cfg.Instance[i].Name] = page // Store pageCtx
+
+			r, errNewRunnerManager := runner.NewRunnerManager(cfg.Instance[i], page, cfg.Debug) // Pass pageCtx
+			if errNewRunnerManager != nil {
+				log.Error(errNewRunnerManager)
+			}
+			err = r.Run("init")
+			if err != nil {
+				log.Debug(err)
+			}
+			log.Debugf("all of the init system rules are executed.")
 		}
-		err = r.Run("init")
-		if err != nil {
-			log.Debug(err)
-		}
-		log.Debugf("all of the init system rules are executed.")
 	}
 
 	mapCfg := make(map[string]config.AppConfigInstance)
@@ -163,6 +227,27 @@ func main() {
 			// Stop API server
 			if err = apiServer.Stop(ctx); err != nil {
 				log.Debugf("Error stopping API server: %v", err)
+			}
+
+			log.Debugf("Waiting for remove user data dir...")
+			time.Sleep(2 * time.Second)
+
+			baseUserDataDir := cfg.Browser.UserDataDir
+			if cfg.InstanceAlone {
+				for i := 0; i < len(cfg.Instance); i++ {
+					userDataDir := path.Join(baseUserDataDir, cfg.Instance[i].Name)
+					log.Debugf("remove user data dir: %s", userDataDir)
+					err = os.RemoveAll(userDataDir)
+					if err != nil {
+						log.Errorf("remove user data dir failed: %v", err)
+					}
+				}
+			} else {
+				log.Debugf("remove user data dir: %s", baseUserDataDir)
+				err = os.RemoveAll(baseUserDataDir)
+				if err != nil {
+					log.Errorf("remove user data dir failed: %v", err)
+				}
 			}
 
 			log.Debugf("Cleanup completed. Exiting...")
