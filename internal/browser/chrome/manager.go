@@ -126,7 +126,7 @@ func (m *Manager) LaunchBrowserAndContext() error {
 	return nil
 }
 
-func (m *Manager) NewPage(url, adapterName, authFile string) (*Page, error) {
+func (m *Manager) NewPage(url, adapterName, authFile string, pageLoaded func()) (*Page, error) {
 	if m.browserCtx == nil {
 		return nil, fmt.Errorf("browser context not initialized. Call LaunchBrowserAndContext first")
 	}
@@ -136,7 +136,7 @@ func (m *Manager) NewPage(url, adapterName, authFile string) (*Page, error) {
 		sniffURL = append(sniffURL, m.appConfig.Instance[i].SniffURL...)
 	}
 
-	return NewPage(m, adapterName, url, authFile, sniffURL)
+	return NewPage(m, adapterName, url, authFile, pageLoaded, sniffURL)
 }
 
 func (m *Manager) Close() error {

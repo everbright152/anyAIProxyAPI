@@ -149,7 +149,20 @@ func main() {
 			log.Debugf("Browser and context launched successfully.")
 
 			log.Debugf("Creating a new page...")
-			page, errNewPage := browserManager.NewPage(cfg.Instance[i].URL, cfg.Instance[i].Adapter, cfg.Instance[i].Auth.File) // Modified to use pageCtx and cancelPage
+
+			pageLoaded := func() {
+				r, errNewRunnerManager := runner.NewRunnerManager(cfg.Instance[i], pages[cfg.Instance[i].Name], cfg.Debug) // Pass pageCtx
+				if errNewRunnerManager != nil {
+					log.Error(errNewRunnerManager)
+				}
+				err = r.Run("init")
+				if err != nil {
+					log.Debug(err)
+				}
+				log.Debugf("all of the init system rules are executed.")
+			}
+
+			page, errNewPage := browserManager.NewPage(cfg.Instance[i].URL, cfg.Instance[i].Adapter, cfg.Instance[i].Auth.File, pageLoaded) // Modified to use pageCtx and cancelPage
 			if errNewPage != nil {
 				log.Fatalf("could not create page: %v", errNewPage)
 				return
@@ -165,16 +178,6 @@ func main() {
 			}
 
 			pages[cfg.Instance[i].Name] = page // Store pageCtx
-
-			r, errNewRunnerManager := runner.NewRunnerManager(cfg.Instance[i], page, cfg.Debug) // Pass pageCtx
-			if errNewRunnerManager != nil {
-				log.Error(errNewRunnerManager)
-			}
-			err = r.Run("init")
-			if err != nil {
-				log.Debug(err)
-			}
-			log.Debugf("all of the init system rules are executed.")
 		}
 	} else {
 		// Create a new browser manager
@@ -202,7 +205,20 @@ func main() {
 
 		for i := 0; i < len(cfg.Instance); i++ {
 			log.Debugf("Creating a new page...")
-			page, errNewPage := browserManager.NewPage(cfg.Instance[i].URL, cfg.Instance[i].Adapter, cfg.Instance[i].Auth.File) // Modified to use pageCtx and cancelPage
+
+			pageLoaded := func() {
+				r, errNewRunnerManager := runner.NewRunnerManager(cfg.Instance[i], pages[cfg.Instance[i].Name], cfg.Debug) // Pass pageCtx
+				if errNewRunnerManager != nil {
+					log.Error(errNewRunnerManager)
+				}
+				err = r.Run("init")
+				if err != nil {
+					log.Debug(err)
+				}
+				log.Debugf("all of the init system rules are executed.")
+			}
+
+			page, errNewPage := browserManager.NewPage(cfg.Instance[i].URL, cfg.Instance[i].Adapter, cfg.Instance[i].Auth.File, pageLoaded) // Modified to use pageCtx and cancelPage
 			if errNewPage != nil {
 				log.Fatalf("could not create page: %v", errNewPage)
 				return
@@ -310,7 +326,7 @@ func main() {
 								lastModified := fileInfo.ModTime()
 								now := time.Now()
 								duration := now.Sub(lastModified)
-								if duration > 5*time.Minute {
+								if duration > 30*time.Second {
 									saveState = true
 								}
 							}

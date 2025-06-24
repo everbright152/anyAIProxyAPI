@@ -505,7 +505,19 @@ func (h *APIHandlers) AuthUpload(c *gin.Context) {
 	}
 	page.Close()
 
-	page, err = h.pages[instanceConfig.Name].GetBrowserManager().NewPage(instanceConfig.URL, instanceConfig.Adapter, instanceConfig.Auth.File)
+	pageLoaded := func() {
+		r, errNewRunnerManager := runner.NewRunnerManager(*instanceConfig, page, h.appConfig.Debug) // Pass pageCtx
+		if errNewRunnerManager != nil {
+			log.Error(errNewRunnerManager)
+		}
+		err = r.Run("init")
+		if err != nil {
+			log.Debug(err)
+		}
+		log.Debugf("all of the init system rules are executed.")
+	}
+
+	page, err = h.pages[instanceConfig.Name].GetBrowserManager().NewPage(instanceConfig.URL, instanceConfig.Adapter, instanceConfig.Auth.File, pageLoaded)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to load auth info: %v", err), "code": 500})
 		return

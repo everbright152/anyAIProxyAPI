@@ -11,6 +11,7 @@ import (
 	"github.com/chromedp/cdproto/fetch"
 	"github.com/chromedp/cdproto/io"
 	"github.com/chromedp/cdproto/network"
+	"github.com/chromedp/cdproto/page"
 	"github.com/chromedp/cdproto/target"
 	"github.com/chromedp/chromedp"
 	"github.com/luispater/anyAIProxyAPI/internal/adapter"
@@ -31,7 +32,7 @@ type Page struct {
 	URL          string
 }
 
-func NewPage(manager *Manager, adapterName string, url string, authFilePath string, sniffURLs ...[]string) (*Page, error) {
+func NewPage(manager *Manager, adapterName string, url string, authFilePath string, pageLoaded func(), sniffURLs ...[]string) (*Page, error) {
 	var sniffURL []string
 	if len(sniffURLs) > 0 {
 		sniffURL = sniffURLs[0]
@@ -61,11 +62,19 @@ func NewPage(manager *Manager, adapterName string, url string, authFilePath stri
 		return nil, fmt.Errorf("failed to create new target (tab): %w", err)
 	}
 
+	startLoadEvent := false
+
 	newPageCtx, newPageCancel = chromedp.NewContext(browserCtx, chromedp.WithTargetID(newTargetID))
 
 	queue := utils.NewQueue[*AIResponse]()
 	chromedp.ListenTarget(newPageCtx, func(ifEv interface{}) {
 		switch ev := ifEv.(type) {
+		case *page.EventLoadEventFired:
+			if startLoadEvent {
+				go func() {
+					pageLoaded()
+				}()
+			}
 		case *network.EventRequestWillBeSent:
 		case *network.EventResponseReceived:
 		case *network.EventDataReceived:
@@ -110,7 +119,7 @@ func NewPage(manager *Manager, adapterName string, url string, authFilePath stri
 				} else if ev.Request.Method == "GET" {
 					if ev.Request.URL == url {
 						cookies, errGetCookies := GetCookies(newPageCtx)
-						if err != nil {
+						if errGetCookies != nil {
 							log.Errorf("get cookies error: %v", errGetCookies)
 						} else {
 							_, errStat := os.Stat(authFilePath)
@@ -131,6 +140,8 @@ func NewPage(manager *Manager, adapterName string, url string, authFilePath stri
 									log.Debug("Successfully loaded auth info")
 								}
 								log.Debug("Stop to loading auth info...")
+
+								startLoadEvent = true
 
 								err = chromedp.Run(newPageCtx, chromedp.Navigate(url))
 								if err != nil {
