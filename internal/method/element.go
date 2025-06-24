@@ -13,7 +13,7 @@ import (
 
 func (m *Method) GetElements(elementSelector string) ([]*cdp.Node, error) {
 	var nodes []*cdp.Node
-	ctx, cancel := context.WithTimeout(m.page.GetContext(), 1*time.Second)
+	ctx, cancel := context.WithTimeout(m.page.GetContext(), 500*time.Millisecond)
 	err := chromedp.Run(ctx,
 		chromedp.Nodes(elementSelector, &nodes, chromedp.ByQueryAll),
 	)
@@ -41,7 +41,7 @@ func (m *Method) GetElement(elementSelector string) (*cdp.Node, error) {
 	var nodes []*cdp.Node
 	// ByQuery by default gets the first element.
 	// Using AtLeast(0) so it doesn't error if not found by Nodes action itself, we check len(nodes) ourselves.
-	ctx, cancel := context.WithTimeout(m.page.GetContext(), 3*time.Second)
+	ctx, cancel := context.WithTimeout(m.page.GetContext(), 3000*time.Millisecond)
 	err := chromedp.Run(ctx,
 		chromedp.Nodes(elementSelector, &nodes, chromedp.ByQueryAll),
 	)

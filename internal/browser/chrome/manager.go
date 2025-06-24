@@ -56,7 +56,7 @@ func NewManager(appConfig *config.AppConfig, indies ...int) (*Manager, error) {
 	}
 
 	if len(indies) > 0 {
-		if appConfig.Instance[indies[0]].ProxyURL != "" {
+		if appConfig.Instance[0].ProxyURL != "" {
 			opts = append(opts, chromedp.Flag("proxy-pac-url", fmt.Sprintf("http://127.0.0.1:2048/proxy.pac?index=%d", indies[0])))
 		}
 	} else {
