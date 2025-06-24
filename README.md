@@ -88,8 +88,10 @@ browser:
     - "--lang=en-US"
     - "--accept-lang=en-US"
   user-data-dir: "/anyAIProxyAPI/user-data-dir"
+  proxy-url: "http://user:pass@192.168.1.1:8080/" # proxy url for browser, if instance-alone is false, this proxy setting will be ignored
 api-port: "2048"
 headless: false
+instance-alone: true # if true, each instance will have its own browser instance
 logfile: "any-ai-proxy.log"
 tokens: # Global tokens for API validation (optional)
   - "global-token-1"
@@ -97,7 +99,7 @@ tokens: # Global tokens for API validation (optional)
 instance:
   - name: "gemini-aistudio"
     adapter: "gemini-aistudio"
-    proxy-url: ""
+    proxy-url: "socks5://user:pass@192.168.1.1:1080/" # proxy url for each instance browser, if instance-alone is true, this proxy setting will be used
     url: "https://aistudio.google.com/prompts/new_chat"
     sniff-url:
       - "https://alkalimakersuite-pa.clients6.google.com/$rpc/google.internal.alkali.applications.makersuite.v1.MakerSuiteService/GenerateContent"
@@ -113,7 +115,7 @@ instance:
       - "gemini-token-4"
   - name: "chatgpt"
     adapter: "chatgpt"
-    proxy-url: ""
+    proxy-url: "" # proxy url for each instance browser, if this setting is empty, the browser will be directly connected to the internet
     url: "https://chatgpt.com/"
     sniff-url:
       - "https://chatgpt.com/backend-api/conversation"
@@ -146,12 +148,15 @@ instance:
   - `fingerprint-chromium-path`: Path to Fingerprint Chromium browser
   - `args`: Browser launch arguments
   - `user-data-dir`: User data directory
+  - `proxy-url`: Proxy URL for browser, if `instance-alone` is false, this proxy setting will be ignored
 - `api-port`: Port for the API server
 - `headless`: Run browser in headless mode
+- `instance-alone`: Run each instance will have its own browser instance
 - `tokens`: Global tokens for API validation (optional)
 - `instance`: Array of AI service instances to manage. Each instance has its own configuration
   - `name`: Instance name
   - `adapter`: Adapter name (corresponds to different AI services)
+  - `proxy-url`: Proxy URL for each instance browser, if `instance-alone` is false, this proxy setting will be ignored
   - `url`: AI service URL
   - `sniff-url`: URL patterns for intercepting responses
   - `auth`: Authentication configuration
@@ -304,7 +309,9 @@ For detailed information about the runner system, see [runner.md](runner.md).
 │   ├── browser/               # Browser management
 │   │   └── chrome/            # ChromeDP manager
 │   ├── config/                # Configuration handling
+│   ├── html/                  # HTML content
 │   ├── method/                # Automation methods
+│   ├── proxy/                 # Proxy server
 │   ├── runner/                # Workflow execution engine
 │   └── utils/                 # Utility functions
 ├── runner/                    # Workflow configurations

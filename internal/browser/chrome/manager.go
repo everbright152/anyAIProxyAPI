@@ -24,7 +24,7 @@ type Manager struct {
 
 // NewManager creates a new Chromedp Manager instance.
 // It initializes the allocator context but does not launch the browser yet.
-func NewManager(appConfig *config.AppConfig) (*Manager, error) {
+func NewManager(appConfig *config.AppConfig, indies ...int) (*Manager, error) {
 	if appConfig == nil {
 		return nil, fmt.Errorf("appConfig cannot be nil")
 	}
@@ -41,9 +41,8 @@ func NewManager(appConfig *config.AppConfig) (*Manager, error) {
 		chromedp.NoFirstRun,
 		chromedp.NoDefaultBrowserCheck,
 		chromedp.Flag("fingerprint", "1000"),
-		// chromedp.Flag("ignore-certificate-errors", true),
-		// chromedp.Flag("proxy-pac-url", "http://127.0.0.1:2048/proxy.pac"),
 
+		// chromedp.Flag("ignore-certificate-errors", true),
 		// chromedp.Flag("disable-background-timer-throttling", true),
 		// chromedp.Flag("disable-backgrounding-occluded-windows", true),
 		// chromedp.Flag("disable-renderer-backgrounding", true),
@@ -54,6 +53,16 @@ func NewManager(appConfig *config.AppConfig) (*Manager, error) {
 		// chromedp.Flag("mute-audio", true),
 		// chromedp.Flag("headless", true), // 默认非无头，可以根据配置添加
 		// chromedp.Flag("remote-debugging-port", "9222"), // 如果需要远程调试
+	}
+
+	if len(indies) > 0 {
+		if appConfig.Instance[indies[0]].ProxyURL != "" {
+			opts = append(opts, chromedp.Flag("proxy-pac-url", fmt.Sprintf("http://127.0.0.1:2048/proxy.pac?index=%d", indies[0])))
+		}
+	} else {
+		if appConfig.Browser.ProxyURL != "" {
+			opts = append(opts, chromedp.Flag("proxy-pac-url", "http://127.0.0.1:2048/proxy.pac"))
+		}
 	}
 
 	if execPath != "" {

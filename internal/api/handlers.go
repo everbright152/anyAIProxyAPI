@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -105,6 +106,26 @@ func (h *APIHandlers) TakeScreenshot(c *gin.Context) {
 		_, _ = c.Writer.Write(buf)
 	} else {
 		c.Status(http.StatusNotFound)
+	}
+}
+
+func (h *APIHandlers) ProxyPac(c *gin.Context) {
+	c.Status(http.StatusOK)
+	c.Header("Content-Type", "application/x-ns-proxy-autoconfig")
+	if h.appConfig.InstanceAlone {
+		index, ok := c.GetQuery("index")
+		if ok {
+			i, err := strconv.ParseUint(index, 10, 32)
+			if err != nil {
+				_, _ = c.Writer.Write([]byte(`function FindProxyForURL(url, host) {return "PROXY 127.0.0.1:3120";}`))
+				return
+			}
+
+			port := 3120 + i
+			_, _ = c.Writer.Write([]byte(fmt.Sprintf(`function FindProxyForURL(url, host) {return "PROXY 127.0.0.1:%d";}`, port)))
+		}
+	} else {
+		_, _ = c.Writer.Write([]byte(`function FindProxyForURL(url, host) {return "PROXY 127.0.0.1:3120";}`))
 	}
 }
 

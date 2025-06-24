@@ -12,6 +12,7 @@ import (
 	"github.com/luispater/anyAIProxyAPI/internal/browser/chrome"
 	chromedpmanager "github.com/luispater/anyAIProxyAPI/internal/browser/chrome"
 	"github.com/luispater/anyAIProxyAPI/internal/config"
+	"github.com/luispater/anyAIProxyAPI/internal/proxy"
 	"github.com/luispater/anyAIProxyAPI/internal/runner"
 	log "github.com/sirupsen/logrus"
 	"os"
@@ -88,6 +89,31 @@ func main() {
 		}
 	}()
 
+	if cfg.InstanceAlone {
+		for i := 0; i < len(cfg.Instance); i++ {
+			port := 3120 + i
+			log.Infof("Starting proxy on port %d", port)
+			if cfg.Instance[i].ProxyURL != "" {
+				go func() {
+					err = proxy.NewProxy(fmt.Sprintf("%d", port), cfg.Instance[i].ProxyURL).Start()
+					if err != nil {
+						log.Fatalf("Proxy failed to start: %v", err)
+					}
+				}()
+			}
+		}
+	} else {
+		log.Info("Starting proxy on port 3210")
+		if cfg.Browser.ProxyURL != "" {
+			go func() {
+				err = proxy.NewProxy("3120", cfg.Browser.ProxyURL).Start()
+				if err != nil {
+					log.Fatalf("Proxy failed to start: %v", err)
+				}
+			}()
+		}
+	}
+
 	log.Info("Starting Any AI Proxy API application...")
 
 	if cfg.InstanceAlone {
@@ -109,7 +135,7 @@ func main() {
 			instanceCfg.Instance = []config.AppConfigInstance{cfg.Instance[i]}
 
 			// Create a new browser manager
-			browserManager, errNewManager := chromedpmanager.NewManager(&instanceCfg)
+			browserManager, errNewManager := chromedpmanager.NewManager(&instanceCfg, i)
 			if errNewManager != nil {
 				log.Fatalf("could not create browser manager: %v", errNewManager)
 				return

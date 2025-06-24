@@ -22,6 +22,7 @@ type AppConfigBrowser struct {
 	FingerprintChromiumPath string   `yaml:"fingerprint-chromium-path"`
 	Args                    []string `yaml:"args"`
 	UserDataDir             string   `yaml:"user-data-dir,omitempty"`
+	ProxyURL                string   `yaml:"proxy-url"`
 }
 type AppConfigRunner struct {
 	Init            string `yaml:"init"`

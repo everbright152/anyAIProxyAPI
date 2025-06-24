@@ -106,6 +106,7 @@ func (s *Server) setupRoutes() {
 	})
 
 	s.engine.GET("/screenshot", s.handlers.TakeScreenshot)
+	s.engine.GET("/proxy.pac", s.handlers.ProxyPac)
 }
 
 // Start starts the API server
