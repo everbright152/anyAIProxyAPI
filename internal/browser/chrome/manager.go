@@ -136,7 +136,7 @@ func (m *Manager) NewPage(url, adapterName, authFile string) (*Page, error) {
 		sniffURL = append(sniffURL, m.appConfig.Instance[i].SniffURL...)
 	}
 
-	return NewPage(m.browserCtx, adapterName, url, authFile, sniffURL)
+	return NewPage(m, adapterName, url, authFile, sniffURL)
 }
 
 func (m *Manager) Close() error {
@@ -205,6 +205,22 @@ func GetCookies(pageCtx context.Context) ([]*network.Cookie, error) {
 		return nil, fmt.Errorf("failed to get cookies: %w", err)
 	}
 	return cookies, nil
+}
+
+func ClearCookies(pageCtx context.Context) error {
+	var err error
+	err = chromedp.Run(pageCtx, chromedp.ActionFunc(func(ctx context.Context) error {
+		err = network.ClearBrowserCookies().Do(ctx)
+		if err != nil {
+			return err
+		}
+		return nil
+	}))
+
+	if err != nil {
+		return fmt.Errorf("failed to clear cookies: %w", err)
+	}
+	return nil
 }
 
 // ClearBrowserCache clears the browser cache.

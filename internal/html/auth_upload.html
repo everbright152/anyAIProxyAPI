@@ -215,6 +215,14 @@
             </div>
 
             <div class="form-group">
+                <label for="tokenInput">Verification Token:</label>
+                <input type="password" id="tokenInput" class="form-control" placeholder="Enter your verification token" required>
+                <small style="color: #666; font-size: 0.9rem; margin-top: 5px; display: block;">
+                    Enter a global token or instance-specific token for authentication
+                </small>
+            </div>
+
+            <div class="form-group">
                 <label for="authFile">Authentication JSON File:</label>
                 <div class="file-upload-wrapper">
                     <input type="file" id="authFile" class="file-upload-input" accept=".json" required>
@@ -318,9 +326,11 @@
         function setupForm() {
             const form = document.getElementById('uploadForm');
             const instanceSelect = document.getElementById('instanceSelect');
-            
+            const tokenInput = document.getElementById('tokenInput');
+
             instanceSelect.addEventListener('change', updateSubmitButton);
-            
+            tokenInput.addEventListener('input', updateSubmitButton);
+
             form.addEventListener('submit', async function(e) {
                 e.preventDefault();
                 await uploadAuth();
@@ -329,23 +339,26 @@
 
         function updateSubmitButton() {
             const instanceSelect = document.getElementById('instanceSelect');
+            const tokenInput = document.getElementById('tokenInput');
             const fileInput = document.getElementById('authFile');
             const submitButton = document.getElementById('submitButton');
-            
+
             const hasInstance = instanceSelect.value !== '';
+            const hasToken = tokenInput.value.trim() !== '';
             const hasFile = fileInput.files.length > 0;
-            
-            submitButton.disabled = !(hasInstance && hasFile);
+
+            submitButton.disabled = !(hasInstance && hasToken && hasFile);
         }
 
         async function uploadAuth() {
             const instanceSelect = document.getElementById('instanceSelect');
+            const tokenInput = document.getElementById('tokenInput');
             const fileInput = document.getElementById('authFile');
             const loading = document.getElementById('loading');
             const submitButton = document.getElementById('submitButton');
-            
-            if (!instanceSelect.value || !fileInput.files[0]) {
-                showMessage('Please select an instance and choose a file.', 'error');
+
+            if (!instanceSelect.value || !tokenInput.value.trim() || !fileInput.files[0]) {
+                showMessage('Please select an instance, enter a token, and choose a file.', 'error');
                 return;
             }
 
@@ -358,7 +371,7 @@
                 // Read file content
                 const file = fileInput.files[0];
                 const fileContent = await readFileAsText(file);
-                
+
                 // Validate JSON
                 let authData;
                 try {
@@ -375,6 +388,7 @@
                     },
                     body: JSON.stringify({
                         name: instanceSelect.value,
+                        token: tokenInput.value.trim(),
                         auth: fileContent
                     })
                 });
@@ -385,6 +399,7 @@
                     showMessage('Authentication uploaded successfully!', 'success');
                     // Reset form
                     instanceSelect.value = '';
+                    tokenInput.value = '';
                     fileInput.value = '';
                     document.querySelector('.upload-text').textContent = 'Choose JSON file or drag & drop here';
                     document.querySelector('.file-upload-button').classList.remove('has-file');

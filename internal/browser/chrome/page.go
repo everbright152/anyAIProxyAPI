@@ -22,6 +22,7 @@ import (
 )
 
 type Page struct {
+	manager      *Manager
 	ctx          context.Context
 	cancel       context.CancelFunc
 	queue        *utils.Queue[*AIResponse]
@@ -30,13 +31,15 @@ type Page struct {
 	URL          string
 }
 
-func NewPage(browserCtx context.Context, adapterName string, url string, authFilePath string, sniffURLs ...[]string) (*Page, error) {
+func NewPage(manager *Manager, adapterName string, url string, authFilePath string, sniffURLs ...[]string) (*Page, error) {
 	var sniffURL []string
 	if len(sniffURLs) > 0 {
 		sniffURL = sniffURLs[0]
 	} else {
 		sniffURL = make([]string, 0)
 	}
+
+	browserCtx := manager.browserCtx
 
 	if browserCtx == nil {
 		return nil, fmt.Errorf("browser context not initialized. Call LaunchBrowserAndContext first")
@@ -162,6 +165,7 @@ func NewPage(browserCtx context.Context, adapterName string, url string, authFil
 	log.Debugf("New Chromedp page (targetID: %s) created.", newTargetID)
 
 	return &Page{
+		manager:     manager,
 		ctx:         newPageCtx,
 		cancel:      newPageCancel,
 		queue:       queue,
@@ -180,6 +184,10 @@ func (p *Page) ResponseData() (*adapter.AdapterResponse, error) {
 		return adp.HandleResponse(data.data, data.done)
 	}
 	return nil, fmt.Errorf("adapter %s not found", p.adapterName)
+}
+
+func (p *Page) GetBrowserManager() *Manager {
+	return p.manager
 }
 
 func (p *Page) GetContext() context.Context {

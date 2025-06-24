@@ -84,6 +84,34 @@ func (h *APIHandlers) validateAPIToken(c *gin.Context, instanceName string) bool
 	return false
 }
 
+// validateToken validates a token for the given instance
+func (h *APIHandlers) validateToken(token string, instanceName string) bool {
+	if token == "" {
+		return false
+	}
+
+	// Check global tokens first
+	for _, globalToken := range h.appConfig.Tokens {
+		if globalToken == token {
+			return true
+		}
+	}
+
+	// Check instance-specific tokens
+	for _, instance := range h.appConfig.Instance {
+		if instance.Name == instanceName {
+			for _, instanceToken := range instance.Tokens {
+				if instanceToken == token {
+					return true
+				}
+			}
+			break
+		}
+	}
+
+	return false
+}
+
 func (h *APIHandlers) TakeScreenshot(c *gin.Context) {
 	defer ScreenshotMutex.Unlock()
 	ScreenshotMutex.Lock()
@@ -403,8 +431,9 @@ func (h *APIHandlers) BrowserReload(c *gin.Context) {
 // AuthUpload handles the /v1/auth/upload endpoint
 func (h *APIHandlers) AuthUpload(c *gin.Context) {
 	var requestData struct {
-		Name string `json:"name" binding:"required"`
-		Auth string `json:"auth" binding:"required"`
+		Name  string `json:"name" binding:"required"`
+		Token string `json:"token" binding:"required"`
+		Auth  string `json:"auth" binding:"required"`
 	}
 
 	if err := c.ShouldBindJSON(&requestData); err != nil {
@@ -423,6 +452,12 @@ func (h *APIHandlers) AuthUpload(c *gin.Context) {
 
 	if instanceConfig == nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": fmt.Sprintf("Instance '%s' not found", requestData.Name), "code": 404})
+		return
+	}
+
+	// Validate the token
+	if !h.validateToken(requestData.Token, requestData.Name) {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid verification token", "code": 401})
 		return
 	}
 
@@ -463,12 +498,20 @@ func (h *APIHandlers) AuthUpload(c *gin.Context) {
 
 	// Navigate to the instance URL
 	pageCtx := page.GetContext()
-
-	err = chrome.LoadAuthInfo(pageCtx, instanceConfig.URL, instanceConfig.Auth.File)
+	err = chrome.ClearCookies(pageCtx)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to load auth info: %v", err), "code": 500})
 		return
 	}
+	page.Close()
+
+	page, err = h.pages[instanceConfig.Name].GetBrowserManager().NewPage(instanceConfig.URL, instanceConfig.Adapter, instanceConfig.Auth.File)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to load auth info: %v", err), "code": 500})
+		return
+	}
+	h.pages[instanceConfig.Name] = page
+	pageCtx = page.GetContext()
 
 	if err = chromedp.Run(pageCtx, chromedp.Navigate(instanceConfig.URL)); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to reload page: %v", err), "code": 500})
