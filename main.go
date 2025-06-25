@@ -271,24 +271,26 @@ func main() {
 				log.Debugf("Error stopping API server: %v", err)
 			}
 
-			log.Debugf("Waiting for remove user data dir...")
-			time.Sleep(2 * time.Second)
+			if !cfg.Browser.KeepUserData {
+				log.Debugf("Waiting for remove user data dir...")
+				time.Sleep(2 * time.Second)
 
-			baseUserDataDir := cfg.Browser.UserDataDir
-			if cfg.InstanceAlone {
-				for i := 0; i < len(cfg.Instance); i++ {
-					userDataDir := path.Join(baseUserDataDir, cfg.Instance[i].Name)
-					log.Debugf("remove user data dir: %s", userDataDir)
-					err = os.RemoveAll(userDataDir)
+				baseUserDataDir := cfg.Browser.UserDataDir
+				if cfg.InstanceAlone {
+					for i := 0; i < len(cfg.Instance); i++ {
+						userDataDir := path.Join(baseUserDataDir, cfg.Instance[i].Name)
+						log.Debugf("remove user data dir: %s", userDataDir)
+						err = os.RemoveAll(userDataDir)
+						if err != nil {
+							log.Errorf("remove user data dir failed: %v", err)
+						}
+					}
+				} else {
+					log.Debugf("remove user data dir: %s", baseUserDataDir)
+					err = os.RemoveAll(baseUserDataDir)
 					if err != nil {
 						log.Errorf("remove user data dir failed: %v", err)
 					}
-				}
-			} else {
-				log.Debugf("remove user data dir: %s", baseUserDataDir)
-				err = os.RemoveAll(baseUserDataDir)
-				if err != nil {
-					log.Errorf("remove user data dir failed: %v", err)
 				}
 			}
 
