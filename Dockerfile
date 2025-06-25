@@ -10,7 +10,7 @@ COPY . .
 
 RUN CGO_ENABLED=0 GOOS=linux go build -o ./anyAIProxyAPI ./main.go
 
-FROM eceasy/fingerprint-chromium:130.0.6723.116
+FROM eceasy/fingerprint-chromium:135.0.7049.95
 
 RUN mkdir /anyAIProxyAPI
 
