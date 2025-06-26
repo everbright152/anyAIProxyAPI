@@ -30,6 +30,8 @@ type Page struct {
 	adapterName  string
 	RequestMutex sync.Mutex
 	URL          string
+	alive        bool
+	Error        chan error
 }
 
 func NewPage(manager *Manager, adapterName string, url string, authFilePath string, pageLoaded func(), sniffURLs ...[]string) (*Page, error) {
@@ -182,6 +184,8 @@ func NewPage(manager *Manager, adapterName string, url string, authFilePath stri
 		queue:       queue,
 		adapterName: adapterName,
 		URL:         url,
+		alive:       true,
+		Error:       make(chan error),
 	}, nil
 }
 
@@ -254,7 +258,12 @@ func (p *Page) GetLocalStorages() (map[string]string, error) {
 	return localStorage, nil
 }
 
+func (p *Page) Alive() bool {
+	return p.alive
+}
+
 func (p *Page) Close() {
+	p.alive = false
 	p.cancel()
 }
 

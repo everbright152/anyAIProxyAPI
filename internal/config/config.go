@@ -29,6 +29,7 @@ type AppConfigRunner struct {
 	Init            string `yaml:"init"`
 	ChatCompletions string `yaml:"chat_completions"`
 	ContextCanceled string `yaml:"context_canceled"`
+	ErrorCheck      string `yaml:"error_check,omitempty"`
 }
 type AppConfigInstance struct {
 	Name                  string                `yaml:"name"`

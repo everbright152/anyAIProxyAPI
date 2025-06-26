@@ -24,41 +24,54 @@ func (g *GeminiAIStudioAdapter) HandleResponse(responseBuffer []byte, done bool)
 	arrToolCalls := make([]string, 0)
 	input := string(responseBuffer)
 	matches := re.FindAllString(input, -1)
-	for _, match := range matches {
-		value := gjson.Get(match, "0.0")
-		if value.IsArray() {
-			arr := value.Array()
-			if len(arr) == 2 {
-				body = body + arr[1].String()
-			} else if len(arr) == 11 && arr[1].Type == gjson.Null && arr[10].Type == gjson.JSON {
-				if !arr[10].IsArray() {
-					continue
-				}
-				arrayToolCalls := arr[10].Array()
-				funcName := arrayToolCalls[0].String()
-				argumentsStr := arrayToolCalls[1].String()
-				params := g.parseToolCallParams(argumentsStr)
+	if len(matches) > 0 {
 
-				toolCallsTemplate := `{"id":"","index":0,"type":"function","function":{"name":"","arguments":""}}`
-				tcs, _ := sjson.Set(toolCallsTemplate, "function.name", funcName)
-				tcs, _ = sjson.Set(tcs, "function.arguments", params)
-				arrToolCalls = append(arrToolCalls, tcs)
-			} else if len(arr) > 2 {
-				think = think + arr[1].String()
+		for _, match := range matches {
+			value := gjson.Get(match, "0.0")
+			if value.IsArray() {
+				arr := value.Array()
+				if len(arr) == 2 {
+					body = body + arr[1].String()
+				} else if len(arr) == 11 && arr[1].Type == gjson.Null && arr[10].Type == gjson.JSON {
+					if !arr[10].IsArray() {
+						continue
+					}
+					arrayToolCalls := arr[10].Array()
+					funcName := arrayToolCalls[0].String()
+					argumentsStr := arrayToolCalls[1].String()
+					params := g.parseToolCallParams(argumentsStr)
+
+					toolCallsTemplate := `{"id":"","index":0,"type":"function","function":{"name":"","arguments":""}}`
+					tcs, _ := sjson.Set(toolCallsTemplate, "function.name", funcName)
+					tcs, _ = sjson.Set(tcs, "function.arguments", params)
+					arrToolCalls = append(arrToolCalls, tcs)
+				} else if len(arr) > 2 {
+					think = think + arr[1].String()
+				}
 			}
 		}
-	}
-	if len(arrToolCalls) > 0 {
-		toolCalls = "[" + strings.Join(arrToolCalls, ",") + "]"
-	}
+		if len(arrToolCalls) > 0 {
+			toolCalls = "[" + strings.Join(arrToolCalls, ",") + "]"
+		}
 
-	result := &AdapterResponse{
-		Content:          body,
-		ReasoningContent: think,
-		ToolCalls:        toolCalls,
-		Done:             done,
+		result := &AdapterResponse{
+			Content:          body,
+			ReasoningContent: think,
+			ToolCalls:        toolCalls,
+			Done:             done,
+		}
+		return result, nil
+	} else {
+		// [,[8,"You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits.",[
+
+		result := &AdapterResponse{
+			Content:          body,
+			ReasoningContent: think,
+			ToolCalls:        toolCalls,
+			Done:             false,
+		}
+		return result, nil
 	}
-	return result, nil
 }
 
 func (g *GeminiAIStudioAdapter) parseToolCallParams(argumentsStr string) string {

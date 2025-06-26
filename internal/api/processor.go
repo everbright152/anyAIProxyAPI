@@ -71,7 +71,7 @@ func (cp *ChatProcessor) processNonStreamingTask(appConfigInstance config.AppCon
 	streamChan := make(chan string, 100)
 
 	page := cp.pages[appConfigInstance.Name]
-	r, errNewRunnerManager := runner.NewRunnerManager(appConfigInstance, page, cp.debug)
+	r, errNewRunnerManager := runner.NewRunnerManager(appConfigInstance, page, cp.debug, false)
 	go func() {
 		if errNewRunnerManager != nil {
 			log.Debug(errNewRunnerManager)
@@ -93,8 +93,11 @@ func (cp *ChatProcessor) processNonStreamingTask(appConfigInstance config.AppCon
 		defer close(streamChan)
 		for !done {
 			select {
+			case pageError := <-page.Error:
+				streamChan <- fmt.Sprintf(`{"error": "%v"}`, pageError)
+				return
 			case err := <-errChannel:
-				streamChan <- fmt.Sprintf(`{"error": %v}`, err)
+				streamChan <- fmt.Sprintf(`{"error": "%v"}`, err)
 				return
 			case <-ctx.Done():
 				return
@@ -161,7 +164,7 @@ func (cp *ChatProcessor) processStreamingTask(appConfigInstance config.AppConfig
 	errChannel := make(chan error)
 
 	page := cp.pages[appConfigInstance.Name]
-	r, errNewRunnerManager := runner.NewRunnerManager(appConfigInstance, page, cp.debug)
+	r, errNewRunnerManager := runner.NewRunnerManager(appConfigInstance, page, cp.debug, false)
 	go func() {
 		if errNewRunnerManager != nil {
 			log.Debug(errNewRunnerManager)
@@ -197,8 +200,11 @@ func (cp *ChatProcessor) processStreamingTask(appConfigInstance config.AppConfig
 		var done bool
 		for !done {
 			select {
+			case pageError := <-page.Error:
+				streamChan <- fmt.Sprintf(`{"error": "%v"}`, pageError)
+				return
 			case err := <-errChannel:
-				streamChan <- fmt.Sprintf(`{"error": %v}`, err)
+				streamChan <- fmt.Sprintf(`{"error": "%v"}`, err)
 				return
 			case <-ctx.Done():
 				return

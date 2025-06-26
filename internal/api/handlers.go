@@ -270,7 +270,7 @@ func (h *APIHandlers) ChatCompletions(c *gin.Context) {
 
 func (h *APIHandlers) handleContextCanceled(instanceIndex int) {
 	page := h.pages[h.appConfig.Instance[instanceIndex].Name]
-	r, err := runner.NewRunnerManager(h.appConfig.Instance[instanceIndex], page, h.debug)
+	r, err := runner.NewRunnerManager(h.appConfig.Instance[instanceIndex], page, h.debug, false)
 	if err != nil {
 		log.Error(err)
 		return
@@ -506,7 +506,7 @@ func (h *APIHandlers) AuthUpload(c *gin.Context) {
 	page.Close()
 
 	pageLoaded := func() {
-		r, errNewRunnerManager := runner.NewRunnerManager(*instanceConfig, page, h.appConfig.Debug) // Pass pageCtx
+		r, errNewRunnerManager := runner.NewRunnerManager(*instanceConfig, page, h.appConfig.Debug, false) // Pass pageCtx
 		if errNewRunnerManager != nil {
 			log.Error(errNewRunnerManager)
 		}

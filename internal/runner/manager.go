@@ -32,7 +32,7 @@ type RunnerManager struct {
 	abort             bool
 }
 
-func NewRunnerManager(appConfigInstance config.AppConfigInstance, page *chrome.Page, debug bool, results ...map[string]RunnerResult) (*RunnerManager, error) {
+func NewRunnerManager(appConfigInstance config.AppConfigInstance, page *chrome.Page, debug bool, isInitRunner bool, results ...map[string]RunnerResult) (*RunnerManager, error) {
 	if len(results) == 0 {
 		results = []map[string]RunnerResult{make(map[string]RunnerResult)}
 	}
@@ -50,6 +50,22 @@ func NewRunnerManager(appConfigInstance config.AppConfigInstance, page *chrome.P
 	if err != nil {
 		return nil, err
 	}
+
+	if isInitRunner {
+		if _, hasKey := runner.configs["error_check"]; hasKey {
+			runner.SetVariable("PAGE", page, "ptr")
+			go func() {
+				for page.Alive() {
+					time.Sleep(1 * time.Second)
+					err = runner.Run("error_check")
+					if err != nil {
+						log.Debugf("error_check failed: %v", err)
+					}
+				}
+			}()
+		}
+	}
+
 	runner.SetVariable("TextFilePromptMinSize", appConfigInstance.TextFilePromptMinSize, "int")
 	return runner, nil
 }
@@ -147,6 +163,8 @@ func (rm *RunnerManager) LoadConfigurations() error {
 			name = "chat_completions"
 		case rm.appConfigInstance.Runner.ContextCanceled:
 			name = "context_canceled"
+		case rm.appConfigInstance.Runner.ErrorCheck:
+			name = "error_check"
 		}
 
 		log.Debugf("Loading configuration file: %s -> %s", name, filePath)
@@ -222,7 +240,7 @@ outLoop:
 		}
 
 		if workflows[executeIndex].Action == "DoRunner" {
-			r, err := NewRunnerManager(rm.appConfigInstance, rm.page, rm.debug, rm.results)
+			r, err := NewRunnerManager(rm.appConfigInstance, rm.page, rm.debug, false, rm.results)
 			if err != nil {
 				log.Error(err)
 				return err
@@ -510,7 +528,7 @@ func (rm *RunnerManager) executeMethod(obj any, methodName string, params []inte
 			input := strings.TrimSpace(reflect.ValueOf(params[i-1]).String())
 			if len(input) > 2 && input[0] == '#' && input[len(input)-1] == '#' {
 				if input == "#NEW_RUNNER#" {
-					newRm, _ := NewRunnerManager(rm.appConfigInstance, rm.page, rm.debug, rm.results)
+					newRm, _ := NewRunnerManager(rm.appConfigInstance, rm.page, rm.debug, false, rm.results)
 					args[paramIndex] = reflect.ValueOf(newRm)
 				} else {
 					input = input[1 : len(input)-1]

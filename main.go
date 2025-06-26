@@ -151,7 +151,7 @@ func main() {
 			log.Debugf("Creating a new page...")
 
 			pageLoaded := func() {
-				r, errNewRunnerManager := runner.NewRunnerManager(cfg.Instance[i], pages[cfg.Instance[i].Name], cfg.Debug) // Pass pageCtx
+				r, errNewRunnerManager := runner.NewRunnerManager(cfg.Instance[i], pages[cfg.Instance[i].Name], cfg.Debug, true) // Pass pageCtx
 				if errNewRunnerManager != nil {
 					log.Error(errNewRunnerManager)
 				}
@@ -207,7 +207,7 @@ func main() {
 			log.Debugf("Creating a new page...")
 
 			pageLoaded := func() {
-				r, errNewRunnerManager := runner.NewRunnerManager(cfg.Instance[i], pages[cfg.Instance[i].Name], cfg.Debug) // Pass pageCtx
+				r, errNewRunnerManager := runner.NewRunnerManager(cfg.Instance[i], pages[cfg.Instance[i].Name], cfg.Debug, true) // Pass pageCtx
 				if errNewRunnerManager != nil {
 					log.Error(errNewRunnerManager)
 				}
@@ -235,7 +235,7 @@ func main() {
 
 			pages[cfg.Instance[i].Name] = page // Store pageCtx
 
-			r, errNewRunnerManager := runner.NewRunnerManager(cfg.Instance[i], page, cfg.Debug) // Pass pageCtx
+			r, errNewRunnerManager := runner.NewRunnerManager(cfg.Instance[i], page, cfg.Debug, true) // Pass pageCtx
 			if errNewRunnerManager != nil {
 				log.Error(errNewRunnerManager)
 			}

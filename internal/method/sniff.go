@@ -18,3 +18,7 @@ func (m *Method) ResponseData(page *chrome.Page, channel chan *adapter.AdapterRe
 		return false, fmt.Errorf("not finish yet")
 	}
 }
+
+func (m *Method) ResponseError(page *chrome.Page, err string) {
+	page.Error <- fmt.Errorf(err)
+}
