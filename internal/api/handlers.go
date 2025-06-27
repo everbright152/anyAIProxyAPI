@@ -22,7 +22,12 @@ import (
 	"github.com/google/uuid"
 )
 
-var ScreenshotMutex sync.Mutex
+var (
+	lastUsedPageIndex = make(map[string]int)
+	pageIndexMutexes  = make(map[string]*sync.Mutex)
+	mutexMapLock      = &sync.Mutex{}
+	ScreenshotMutex   sync.Mutex
+)
 
 // APIHandlers contains the handlers for API endpoints
 type APIHandlers struct {
@@ -215,9 +220,31 @@ func (h *APIHandlers) ChatCompletions(c *gin.Context) {
 	}()
 
 	if pages, ok := h.pages[instanceName]; ok {
-		locked := false
+		// Get the mutex for the instance
+		mutex, exists := pageIndexMutexes[instanceName]
+		if !exists {
+			mutexMapLock.Lock()
+			mutex = &sync.Mutex{}
+			pageIndexMutexes[instanceName] = mutex
+			mutexMapLock.Unlock()
+		}
+
+		// Lock the mutex to update the last used page index
+		mutex.Lock()
+		startIndex := lastUsedPageIndex[instanceName]
+		currentIndex := (startIndex + 1) % len(pages)
+		lastUsedPageIndex[instanceName] = currentIndex
+		mutex.Unlock()
+
+		// Reorder the pages to start from the last used index
+		reorderedPages := make([]*chrome.Page, len(pages))
 		for i := 0; i < len(pages); i++ {
-			page = pages[i]
+			reorderedPages[i] = pages[(startIndex+1+i)%len(pages)]
+		}
+
+		locked := false
+		for i := 0; i < len(reorderedPages); i++ {
+			page = reorderedPages[i]
 			if page.RequestMutex.TryLock() {
 				locked = true
 				break
