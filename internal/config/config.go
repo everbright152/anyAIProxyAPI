@@ -7,15 +7,14 @@ import (
 
 // AppConfig holds the application configuration.
 type AppConfig struct {
-	Version       string              `yaml:"version"`
-	Debug         bool                `yaml:"debug"`
-	Browser       AppConfigBrowser    `yaml:"browser"`
-	Headless      bool                `yaml:"headless"`
-	ApiPort       string              `yaml:"api-port"`
-	Instance      []AppConfigInstance `yaml:"instance"`
-	LogFile       string              `yaml:"logfile"`
-	Tokens        []string            `yaml:"tokens,omitempty"` // Global tokens for API validation
-	InstanceAlone bool                `yaml:"instance-alone"`
+	Version  string              `yaml:"version"`
+	Debug    bool                `yaml:"debug"`
+	Browser  AppConfigBrowser    `yaml:"browser"`
+	Headless bool                `yaml:"headless"`
+	ApiPort  string              `yaml:"api-port"`
+	Instance []AppConfigInstance `yaml:"instance"`
+	LogFile  string              `yaml:"logfile"`
+	Tokens   []string            `yaml:"tokens,omitempty"` // Global tokens for API validation
 }
 
 type AppConfigBrowser struct {
@@ -45,8 +44,9 @@ type AppConfigInstance struct {
 }
 
 type AppConfigInstanceAuth struct {
-	File  string `yaml:"file"`
-	Check string `yaml:"check"`
+	// File  string   `yaml:"file"`
+	Files []string `yaml:"files"`
+	Check string   `yaml:"check"`
 }
 
 // LoadConfig loads configuration from environment variables or defaults.

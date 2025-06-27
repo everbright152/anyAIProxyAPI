@@ -17,13 +17,13 @@ import (
 
 // ChatProcessor implements TaskProcessor interface
 type ChatProcessor struct {
-	pages     map[string]*chrome.Page
+	pages     map[string][]*chrome.Page
 	debug     bool
 	appConfig *config.AppConfig
 }
 
 // NewChatProcessor creates a new chat processor
-func NewChatProcessor(appConfig *config.AppConfig, pages map[string]*chrome.Page, debug bool) *ChatProcessor {
+func NewChatProcessor(appConfig *config.AppConfig, pages map[string][]*chrome.Page, debug bool) *ChatProcessor {
 	return &ChatProcessor{
 		pages:     pages,
 		debug:     debug,
@@ -70,15 +70,14 @@ func (cp *ChatProcessor) processNonStreamingTask(appConfigInstance config.AppCon
 	errChannel := make(chan error)
 	streamChan := make(chan string, 100)
 
-	page := cp.pages[appConfigInstance.Name]
-	r, errNewRunnerManager := runner.NewRunnerManager(appConfigInstance, page, cp.debug, false)
+	r, errNewRunnerManager := runner.NewRunnerManager(appConfigInstance, task.Page, cp.debug, false)
 	go func() {
 		if errNewRunnerManager != nil {
 			log.Debug(errNewRunnerManager)
 			return
 		}
 		r.SetVariable("REQUEST", task.Request, "string")
-		r.SetVariable("PAGE", page, "ptr")
+		r.SetVariable("PAGE", task.Page, "ptr")
 		r.SetVariable("PAGE-DATA-CHANNEL", channel, "ptr")
 		err := r.Run("chat_completions")
 		if err != nil {
@@ -93,7 +92,7 @@ func (cp *ChatProcessor) processNonStreamingTask(appConfigInstance config.AppCon
 		defer close(streamChan)
 		for !done {
 			select {
-			case pageError := <-page.Error:
+			case pageError := <-task.Page.Error:
 				streamChan <- fmt.Sprintf(`{"error": "%v"}`, pageError)
 				return
 			case err := <-errChannel:
@@ -153,6 +152,7 @@ func (cp *ChatProcessor) processNonStreamingTask(appConfigInstance config.AppCon
 		Success: true,
 		Stream:  streamChan,
 		Runner:  r,
+		Page:    task.Page,
 	}
 }
 
@@ -163,15 +163,14 @@ func (cp *ChatProcessor) processStreamingTask(appConfigInstance config.AppConfig
 	channel := make(chan *adapter.AdapterResponse)
 	errChannel := make(chan error)
 
-	page := cp.pages[appConfigInstance.Name]
-	r, errNewRunnerManager := runner.NewRunnerManager(appConfigInstance, page, cp.debug, false)
+	r, errNewRunnerManager := runner.NewRunnerManager(appConfigInstance, task.Page, cp.debug, false)
 	go func() {
 		if errNewRunnerManager != nil {
 			log.Debug(errNewRunnerManager)
 			return
 		}
 		r.SetVariable("REQUEST", task.Request, "string")
-		r.SetVariable("PAGE", page, "ptr")
+		r.SetVariable("PAGE", task.Page, "ptr")
 		r.SetVariable("PAGE-DATA-CHANNEL", channel, "ptr")
 		err := r.Run("chat_completions")
 		if err != nil {
@@ -200,7 +199,7 @@ func (cp *ChatProcessor) processStreamingTask(appConfigInstance config.AppConfig
 		var done bool
 		for !done {
 			select {
-			case pageError := <-page.Error:
+			case pageError := <-task.Page.Error:
 				streamChan <- fmt.Sprintf(`{"error": "%v"}`, pageError)
 				return
 			case err := <-errChannel:
@@ -248,6 +247,7 @@ func (cp *ChatProcessor) processStreamingTask(appConfigInstance config.AppConfig
 		Success: true,
 		Stream:  streamChan,
 		Runner:  r,
+		Page:    task.Page,
 	}
 }
 

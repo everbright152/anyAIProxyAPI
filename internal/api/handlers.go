@@ -27,13 +27,13 @@ var ScreenshotMutex sync.Mutex
 // APIHandlers contains the handlers for API endpoints
 type APIHandlers struct {
 	queue     *RequestQueue
-	pages     map[string]*chrome.Page
+	pages     map[string][]*chrome.Page
 	debug     bool
 	appConfig *config.AppConfig
 }
 
 // NewAPIHandlers creates a new API handlers instance
-func NewAPIHandlers(appConfig *config.AppConfig, queue *RequestQueue, pages map[string]*chrome.Page, debug bool) *APIHandlers {
+func NewAPIHandlers(appConfig *config.AppConfig, queue *RequestQueue, pages map[string][]*chrome.Page, debug bool) *APIHandlers {
 	return &APIHandlers{
 		queue:     queue,
 		pages:     pages,
@@ -120,10 +120,21 @@ func (h *APIHandlers) TakeScreenshot(c *gin.Context) {
 		c.Status(http.StatusNotFound)
 		return
 	}
+	instanceIndex, ok := c.GetQuery("index")
+	if !ok {
+		c.Status(http.StatusNotFound)
+		return
+	}
+	index, err := strconv.ParseUint(instanceIndex, 10, 64)
+	if err != nil {
+		c.Status(http.StatusNotFound)
+		return
+	}
+
 	if page, hasKey := h.pages[instanceName]; hasKey {
 		var buf []byte
-		pageCtx := page.GetContext()
-		if err := chromedp.Run(pageCtx, chromedp.CaptureScreenshot(&buf)); err != nil {
+		pageCtx := page[index].GetContext()
+		if err = chromedp.Run(pageCtx, chromedp.CaptureScreenshot(&buf)); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to take screenshot: %v", err), "code": 500})
 			return
 		}
@@ -140,20 +151,16 @@ func (h *APIHandlers) TakeScreenshot(c *gin.Context) {
 func (h *APIHandlers) ProxyPac(c *gin.Context) {
 	c.Status(http.StatusOK)
 	c.Header("Content-Type", "application/x-ns-proxy-autoconfig")
-	if h.appConfig.InstanceAlone {
-		index, ok := c.GetQuery("index")
-		if ok {
-			i, err := strconv.ParseUint(index, 10, 32)
-			if err != nil {
-				_, _ = c.Writer.Write([]byte(`function FindProxyForURL(url, host) {return "PROXY 127.0.0.1:3120";}`))
-				return
-			}
-
-			port := 3120 + i
-			_, _ = c.Writer.Write([]byte(fmt.Sprintf(`function FindProxyForURL(url, host) {return "PROXY 127.0.0.1:%d";}`, port)))
+	index, ok := c.GetQuery("index")
+	if ok {
+		i, err := strconv.ParseUint(index, 10, 32)
+		if err != nil {
+			_, _ = c.Writer.Write([]byte(`function FindProxyForURL(url, host) {return "PROXY 127.0.0.1:3120";}`))
+			return
 		}
-	} else {
-		_, _ = c.Writer.Write([]byte(`function FindProxyForURL(url, host) {return "PROXY 127.0.0.1:3120";}`))
+
+		port := 3120 + i
+		_, _ = c.Writer.Write([]byte(fmt.Sprintf(`function FindProxyForURL(url, host) {return "PROXY 127.0.0.1:%d";}`, port)))
 	}
 }
 
@@ -200,9 +207,26 @@ func (h *APIHandlers) ChatCompletions(c *gin.Context) {
 			instanceIndex = i
 		}
 	}
-	if page, ok := h.pages[instanceName]; ok {
-		defer page.RequestMutex.Unlock()
-		page.RequestMutex.Lock()
+	var page *chrome.Page
+	defer func() {
+		if page != nil {
+			page.RequestMutex.Unlock()
+		}
+	}()
+
+	if pages, ok := h.pages[instanceName]; ok {
+		locked := false
+		for i := 0; i < len(pages); i++ {
+			page = pages[i]
+			if page.RequestMutex.TryLock() {
+				locked = true
+				break
+			}
+		}
+		if !locked {
+			page = pages[0]
+			page.RequestMutex.Lock()
+		}
 	} else {
 		c.JSON(http.StatusNotFound, ErrorResponse{
 			Error: ErrorDetail{
@@ -224,6 +248,7 @@ func (h *APIHandlers) ChatCompletions(c *gin.Context) {
 		CreatedAt:    time.Now(),
 		Context:      c,
 		InstanceName: instanceName,
+		Page:         page,
 	}
 
 	// Add a task to queue
@@ -268,8 +293,7 @@ func (h *APIHandlers) ChatCompletions(c *gin.Context) {
 	}
 }
 
-func (h *APIHandlers) handleContextCanceled(instanceIndex int) {
-	page := h.pages[h.appConfig.Instance[instanceIndex].Name]
+func (h *APIHandlers) handleContextCanceled(instanceIndex int, page *chrome.Page) {
 	r, err := runner.NewRunnerManager(h.appConfig.Instance[instanceIndex], page, h.debug, false)
 	if err != nil {
 		log.Error(err)
@@ -305,7 +329,7 @@ func (h *APIHandlers) handleNonStreamingResponse(instanceIndex int, c *gin.Conte
 		case <-c.Request.Context().Done():
 			if c.Request.Context().Err().Error() == "context canceled" {
 				log.Debugf("Client disconnected: %v", c.Request.Context().Err())
-				h.handleContextCanceled(instanceIndex)
+				h.handleContextCanceled(instanceIndex, response.Page)
 				response.Runner.Abort()
 			}
 			return
@@ -356,7 +380,7 @@ func (h *APIHandlers) handleStreamingResponse(instanceIndex int, c *gin.Context,
 		case <-c.Request.Context().Done():
 			if c.Request.Context().Err().Error() == "context canceled" {
 				log.Debugf("Client disconnected: %v", c.Request.Context().Err())
-				h.handleContextCanceled(instanceIndex)
+				h.handleContextCanceled(instanceIndex, response.Page)
 				response.Runner.Abort()
 			}
 			return
@@ -416,10 +440,20 @@ func (h *APIHandlers) BrowserReload(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": fmt.Sprintf("Page for instance '%s' not found", instanceName), "code": 404})
 		return
 	}
+	instanceIndex, ok := c.GetQuery("index")
+	if !ok {
+		c.Status(http.StatusNotFound)
+		return
+	}
+	index, err := strconv.ParseUint(instanceIndex, 10, 64)
+	if err != nil {
+		c.Status(http.StatusNotFound)
+		return
+	}
 
 	// Navigate to the instance URL
-	pageCtx := page.GetContext()
-	if err := chromedp.Run(pageCtx, chromedp.Navigate(instanceConfig.URL)); err != nil {
+	pageCtx := page[index].GetContext()
+	if err = chromedp.Run(pageCtx, chromedp.Navigate(instanceConfig.URL)); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to reload page: %v", err), "code": 500})
 		return
 	}
@@ -432,6 +466,7 @@ func (h *APIHandlers) BrowserReload(c *gin.Context) {
 func (h *APIHandlers) AuthUpload(c *gin.Context) {
 	var requestData struct {
 		Name  string `json:"name" binding:"required"`
+		Index *int   `json:"index" binding:"required"`
 		Token string `json:"token" binding:"required"`
 		Auth  string `json:"auth" binding:"required"`
 	}
@@ -469,7 +504,7 @@ func (h *APIHandlers) AuthUpload(c *gin.Context) {
 	}
 
 	// Ensure the auth directory exists
-	authAbsPath, err := filepath.Abs(instanceConfig.Auth.File)
+	authAbsPath, err := filepath.Abs(instanceConfig.Auth.Files[*requestData.Index])
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to get absolute path: %v", err), "code": 500})
 		return
@@ -484,29 +519,29 @@ func (h *APIHandlers) AuthUpload(c *gin.Context) {
 	}
 
 	// Write the auth info to file
-	if err = os.WriteFile(instanceConfig.Auth.File, []byte(requestData.Auth), 0644); err != nil {
+	if err = os.WriteFile(instanceConfig.Auth.Files[*requestData.Index], []byte(requestData.Auth), 0644); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to write auth file: %v", err), "code": 500})
 		return
 	}
 
 	// Get the page for this instance
-	page, exists := h.pages[instanceConfig.Name]
+	pages, exists := h.pages[instanceConfig.Name]
 	if !exists {
 		c.JSON(http.StatusNotFound, gin.H{"error": fmt.Sprintf("Page for instance '%s' not found", instanceConfig.Name), "code": 404})
 		return
 	}
 
 	// Navigate to the instance URL
-	pageCtx := page.GetContext()
+	pageCtx := pages[*requestData.Index].GetContext()
 	err = chrome.ClearCookies(pageCtx)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to load auth info: %v", err), "code": 500})
 		return
 	}
-	page.Close()
+	pages[*requestData.Index].Close()
 
 	pageLoaded := func() {
-		r, errNewRunnerManager := runner.NewRunnerManager(*instanceConfig, page, h.appConfig.Debug, false) // Pass pageCtx
+		r, errNewRunnerManager := runner.NewRunnerManager(*instanceConfig, pages[*requestData.Index], h.appConfig.Debug, false) // Pass pageCtx
 		if errNewRunnerManager != nil {
 			log.Error(errNewRunnerManager)
 		}
@@ -517,70 +552,21 @@ func (h *APIHandlers) AuthUpload(c *gin.Context) {
 		log.Debugf("all of the init system rules are executed.")
 	}
 
-	page, err = h.pages[instanceConfig.Name].GetBrowserManager().NewPage(instanceConfig.URL, instanceConfig.Adapter, instanceConfig.Auth.File, pageLoaded)
+	p, err := h.pages[instanceConfig.Name][*requestData.Index].GetBrowserManager().NewPage(instanceConfig.URL, instanceConfig.Adapter, instanceConfig.Auth.Files[*requestData.Index], pageLoaded)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to load auth info: %v", err), "code": 500})
 		return
 	}
-	h.pages[instanceConfig.Name] = page
-	pageCtx = page.GetContext()
+	h.pages[instanceConfig.Name][*requestData.Index] = p
+	pageCtx = p.GetContext()
 
 	if err = chromedp.Run(pageCtx, chromedp.Navigate(instanceConfig.URL)); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to reload page: %v", err), "code": 500})
 		return
 	}
 
-	log.Debugf("Successfully uploaded auth info for instance '%s' to file: %s", requestData.Name, instanceConfig.Auth.File)
+	log.Debugf("Successfully uploaded auth info for instance '%s' to file: %s", requestData.Name, instanceConfig.Auth.Files[*requestData.Index])
 	c.JSON(http.StatusOK, gin.H{"message": "Auth info uploaded successfully"})
-}
-
-// AuthDownload handles the /v1/auth/download endpoint
-func (h *APIHandlers) AuthDownload(c *gin.Context) {
-	instanceName, ok := c.GetQuery("name")
-	if !ok || instanceName == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Missing required parameter: name", "code": 400})
-		return
-	}
-
-	// Find the instance configuration
-	var instanceConfig *config.AppConfigInstance
-	for i := range h.appConfig.Instance {
-		if h.appConfig.Instance[i].Name == instanceName {
-			instanceConfig = &h.appConfig.Instance[i]
-			break
-		}
-	}
-
-	if instanceConfig == nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": fmt.Sprintf("Instance '%s' not found", instanceName), "code": 404})
-		return
-	}
-
-	// Check if auth file exists
-	if _, err := os.Stat(instanceConfig.Auth.File); os.IsNotExist(err) {
-		c.JSON(http.StatusNotFound, gin.H{"error": fmt.Sprintf("Auth file not found for instance '%s'", instanceName), "code": 404})
-		return
-	}
-
-	// Read the auth file
-	authData, err := os.ReadFile(instanceConfig.Auth.File)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to read auth file: %v", err), "code": 500})
-		return
-	}
-
-	// Validate the auth JSON format
-	var authInfo chrome.AuthInfo
-	if err = json.Unmarshal(authData, &authInfo); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Invalid auth file format: %v", err), "code": 500})
-		return
-	}
-
-	log.Debugf("Successfully downloaded auth info for instance '%s' from file: %s", instanceName, instanceConfig.Auth.File)
-
-	// Return the auth info as JSON
-	c.Header("Content-Type", "application/json")
-	c.JSON(http.StatusOK, authInfo)
 }
 
 // AuthUploadPage handles the GET /v1/auth/upload endpoint to serve the upload page

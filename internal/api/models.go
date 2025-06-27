@@ -2,6 +2,7 @@ package api
 
 import (
 	"github.com/gin-gonic/gin"
+	"github.com/luispater/anyAIProxyAPI/internal/browser/chrome"
 	"github.com/luispater/anyAIProxyAPI/internal/runner"
 	"time"
 )
@@ -32,6 +33,7 @@ type RequestTask struct {
 	CreatedAt    time.Time          `json:"created_at"`
 	Context      *gin.Context       `json:"context"`
 	InstanceName string             `json:"instance_name"`
+	Page         *chrome.Page       `json:"page"`
 }
 
 // TaskResponse represents the response from processing a task
@@ -41,4 +43,5 @@ type TaskResponse struct {
 	Stream   chan string `json:"-"`
 	Error    error       `json:"error,omitempty"`
 	Runner   *runner.RunnerManager
+	Page     *chrome.Page `json:"page"`
 }

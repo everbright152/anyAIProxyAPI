@@ -68,7 +68,7 @@ func main() {
 		log.SetLevel(log.InfoLevel)
 	}
 
-	pages := make(map[string]*chrome.Page) // Changed from playwright.Page to context.Context
+	pages := make(map[string][]*chrome.Page) // Changed from playwright.Page to context.Context
 
 	// Create API server configuration
 	apiConfig := &api.ServerConfig{
@@ -89,24 +89,12 @@ func main() {
 		}
 	}()
 
-	if cfg.InstanceAlone {
-		for i := 0; i < len(cfg.Instance); i++ {
-			port := 3120 + i
-			log.Infof("Starting proxy on port %d", port)
-			if cfg.Instance[i].ProxyURL != "" {
-				go func() {
-					err = proxy.NewProxy(fmt.Sprintf("%d", port), cfg.Instance[i].ProxyURL).Start()
-					if err != nil {
-						log.Fatalf("Proxy failed to start: %v", err)
-					}
-				}()
-			}
-		}
-	} else {
-		log.Info("Starting proxy on port 3210")
-		if cfg.Browser.ProxyURL != "" {
+	for i := 0; i < len(cfg.Instance); i++ {
+		port := 3120 + i
+		log.Infof("Starting proxy on port %d", port)
+		if cfg.Instance[i].ProxyURL != "" {
 			go func() {
-				err = proxy.NewProxy("3120", cfg.Browser.ProxyURL).Start()
+				err = proxy.NewProxy(fmt.Sprintf("%d", port), cfg.Instance[i].ProxyURL).Start()
 				if err != nil {
 					log.Fatalf("Proxy failed to start: %v", err)
 				}
@@ -116,42 +104,43 @@ func main() {
 
 	log.Info("Starting Any AI Proxy API application...")
 
-	if cfg.InstanceAlone {
-		browserManagers := make([]*chromedpmanager.Manager, 0)
-		defer func() {
-			log.Debugf("Closing browser manager...")
-			for i := 0; i < len(browserManagers); i++ {
-				if err = browserManagers[i].Close(); err != nil {
-					log.Debugf("Error closing browser manager: %v", err)
-				}
+	browserManagers := make([]*chromedpmanager.Manager, 0)
+	defer func() {
+		log.Debugf("Closing browser manager...")
+		for i := 0; i < len(browserManagers); i++ {
+			if err = browserManagers[i].Close(); err != nil {
+				log.Debugf("Error closing browser manager: %v", err)
 			}
-			log.Debugf("Browser manager closed.")
-		}()
+		}
+		log.Debugf("Browser manager closed.")
+	}()
 
-		baseUserDataDir := cfg.Browser.UserDataDir
-		for i := 0; i < len(cfg.Instance); i++ {
+	baseUserDataDir := cfg.Browser.UserDataDir
+	for i := 0; i < len(cfg.Instance); i++ {
+		for j := 0; j < len(cfg.Instance[i].Auth.Files); j++ {
 			instanceCfg := *cfg
-			instanceCfg.Browser.UserDataDir = path.Join(baseUserDataDir, cfg.Instance[i].Name)
+			instanceCfg.Browser.UserDataDir = path.Join(baseUserDataDir, fmt.Sprintf("%s-%d", cfg.Instance[i].Name, j))
 			instanceCfg.Instance = []config.AppConfigInstance{cfg.Instance[i]}
 
 			// Create a new browser manager
 			browserManager, errNewManager := chromedpmanager.NewManager(&instanceCfg, i)
 			if errNewManager != nil {
-				log.Fatalf("could not create browser manager: %v", errNewManager)
-				return
+				log.Errorf("could not create browser manager: %v", errNewManager)
+				continue
 			}
 			browserManagers = append(browserManagers, browserManager)
 
 			// Launch the browser and create a context
 			if err = browserManager.LaunchBrowserAndContext(); err != nil {
-				log.Fatalf("could not launch browser and context: %v", err)
+				log.Errorf("could not launch browser and context: %v", err)
+				continue
 			}
 			log.Debugf("Browser and context launched successfully.")
 
 			log.Debugf("Creating a new page...")
 
 			pageLoaded := func() {
-				r, errNewRunnerManager := runner.NewRunnerManager(cfg.Instance[i], pages[cfg.Instance[i].Name], cfg.Debug, true) // Pass pageCtx
+				r, errNewRunnerManager := runner.NewRunnerManager(cfg.Instance[i], pages[cfg.Instance[i].Name][j], cfg.Debug, true) // Pass pageCtx
 				if errNewRunnerManager != nil {
 					log.Error(errNewRunnerManager)
 				}
@@ -162,10 +151,10 @@ func main() {
 				log.Debugf("all of the init system rules are executed.")
 			}
 
-			page, errNewPage := browserManager.NewPage(cfg.Instance[i].URL, cfg.Instance[i].Adapter, cfg.Instance[i].Auth.File, pageLoaded) // Modified to use pageCtx and cancelPage
+			page, errNewPage := browserManager.NewPage(cfg.Instance[i].URL, cfg.Instance[i].Adapter, cfg.Instance[i].Auth.Files[j], pageLoaded) // Modified to use pageCtx and cancelPage
 			if errNewPage != nil {
-				log.Fatalf("could not create page: %v", errNewPage)
-				return
+				log.Errorf("could not create page: %v", errNewPage)
+				continue
 			}
 
 			var currentURL string
@@ -177,73 +166,10 @@ func main() {
 				log.Debugf("Successfully navigated instance %s to: %s. Page loaded.", cfg.Instance[i].Name, currentURL)
 			}
 
-			pages[cfg.Instance[i].Name] = page // Store pageCtx
-		}
-	} else {
-		// Create a new browser manager
-		baseUserDataDir := cfg.Browser.UserDataDir
-		cfg.Browser.UserDataDir = path.Join(baseUserDataDir, "shared")
-		browserManager, errNewManager := chromedpmanager.NewManager(cfg)
-		if errNewManager != nil {
-			log.Fatalf("could not create browser manager: %v", errNewManager)
-			return
-		}
-		defer func() {
-			log.Debugf("Closing browser manager...")
-			if err = browserManager.Close(); err != nil {
-				log.Debugf("Error closing browser manager: %v", err)
+			if pages[cfg.Instance[i].Name] == nil {
+				pages[cfg.Instance[i].Name] = make([]*chrome.Page, 0)
 			}
-			log.Debugf("Browser manager closed.")
-		}()
-
-		// Launch the browser and create a context
-		if err = browserManager.LaunchBrowserAndContext(); err != nil {
-			log.Fatalf("could not launch browser and context: %v", err)
-		}
-
-		log.Debugf("Browser and context launched successfully.")
-
-		for i := 0; i < len(cfg.Instance); i++ {
-			log.Debugf("Creating a new page...")
-
-			pageLoaded := func() {
-				r, errNewRunnerManager := runner.NewRunnerManager(cfg.Instance[i], pages[cfg.Instance[i].Name], cfg.Debug, true) // Pass pageCtx
-				if errNewRunnerManager != nil {
-					log.Error(errNewRunnerManager)
-				}
-				err = r.Run("init")
-				if err != nil {
-					log.Debug(err)
-				}
-				log.Debugf("all of the init system rules are executed.")
-			}
-
-			page, errNewPage := browserManager.NewPage(cfg.Instance[i].URL, cfg.Instance[i].Adapter, cfg.Instance[i].Auth.File, pageLoaded) // Modified to use pageCtx and cancelPage
-			if errNewPage != nil {
-				log.Fatalf("could not create page: %v", errNewPage)
-				return
-			}
-
-			var currentURL string
-			err = chromedp.Run(page.GetContext(), chromedp.Location(&currentURL))
-			if err != nil {
-				log.Warnf("could not get current URL for instance %s: %v", cfg.Instance[i].Name, err)
-				// Continue execution even if URL fetch fails, as navigation might have succeeded.
-			} else {
-				log.Debugf("Successfully navigated instance %s to: %s. Page loaded.", cfg.Instance[i].Name, currentURL)
-			}
-
-			pages[cfg.Instance[i].Name] = page // Store pageCtx
-
-			r, errNewRunnerManager := runner.NewRunnerManager(cfg.Instance[i], page, cfg.Debug, true) // Pass pageCtx
-			if errNewRunnerManager != nil {
-				log.Error(errNewRunnerManager)
-			}
-			err = r.Run("init")
-			if err != nil {
-				log.Debug(err)
-			}
-			log.Debugf("all of the init system rules are executed.")
+			pages[cfg.Instance[i].Name] = append(pages[cfg.Instance[i].Name], page) // Store pageCtx
 		}
 	}
 
@@ -263,33 +189,27 @@ func main() {
 
 			// Create shutdown context
 			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-			defer cancel()
 			_ = ctx // Mark ctx as used to avoid error, as apiServer.Stop(ctx) is commented out
 
 			// Stop API server
 			if err = apiServer.Stop(ctx); err != nil {
 				log.Debugf("Error stopping API server: %v", err)
 			}
+			cancel()
 
 			if !cfg.Browser.KeepUserData {
 				log.Debugf("Waiting for remove user data dir...")
 				time.Sleep(2 * time.Second)
 
-				baseUserDataDir := cfg.Browser.UserDataDir
-				if cfg.InstanceAlone {
-					for i := 0; i < len(cfg.Instance); i++ {
-						userDataDir := path.Join(baseUserDataDir, cfg.Instance[i].Name)
+				baseUserDataDir = cfg.Browser.UserDataDir
+				for i := 0; i < len(cfg.Instance); i++ {
+					for j := 0; j < len(cfg.Instance[i].Auth.Files); j++ {
+						userDataDir := path.Join(baseUserDataDir, fmt.Sprintf("%s-%d", cfg.Instance[i].Name, j))
 						log.Debugf("remove user data dir: %s", userDataDir)
 						err = os.RemoveAll(userDataDir)
 						if err != nil {
 							log.Errorf("remove user data dir failed: %v", err)
 						}
-					}
-				} else {
-					log.Debugf("remove user data dir: %s", baseUserDataDir)
-					err = os.RemoveAll(baseUserDataDir)
-					if err != nil {
-						log.Errorf("remove user data dir failed: %v", err)
 					}
 				}
 			}
@@ -298,92 +218,96 @@ func main() {
 			os.Exit(0)
 		case <-time.After(5 * time.Second):
 			if !cfg.Headless {
-				for instanceName, pageInstance := range pages { // p is pageCtxInstance
+				for instanceName, pageInstances := range pages { // p is pageCtxInstance
 					if mapCfg[instanceName].Auth.Check != "" {
-						hasCheckFlag := false
+						for i := 0; i < len(pageInstances); i++ {
+							pageInstance := pageInstances[i]
 
-						var nodes []*cdp.Node
+							hasCheckFlag := false
 
-						timeoutCtx, cancel := context.WithTimeout(pageInstance.GetContext(), 1*time.Second)
-						err = chromedp.Run(timeoutCtx,
-							chromedp.Nodes(mapCfg[instanceName].Auth.Check, &nodes, chromedp.ByQueryAll),
-						)
-						cancel()
-						if err != nil {
-							if err.Error() != "context deadline exceeded" {
-								log.Errorf("Error checking auth selector '%s' for instance %s: %v", mapCfg[instanceName].Auth.Check, instanceName, err)
-							}
-						} else if len(nodes) == 0 {
-							log.Debugf("Auth.Check selector '%s' not found for instance %s. Skipping state save.", mapCfg[instanceName].Auth.Check, instanceName)
-						} else {
-							hasCheckFlag = true
-							log.Debugf("Auth.Check selector '%s' found %d elements for instance %s.", mapCfg[instanceName].Auth.Check, len(nodes), instanceName)
-						}
+							var nodes []*cdp.Node
 
-						if hasCheckFlag {
-							saveState := false
-							if fileInfo, errStat := os.Stat(mapCfg[instanceName].Auth.File); os.IsNotExist(errStat) {
-								saveState = true
+							timeoutCtx, cancel := context.WithTimeout(pageInstance.GetContext(), 1*time.Second)
+							err = chromedp.Run(timeoutCtx,
+								chromedp.Nodes(mapCfg[instanceName].Auth.Check, &nodes, chromedp.ByQueryAll),
+							)
+							cancel()
+							if err != nil {
+								if err.Error() != "context deadline exceeded" {
+									log.Errorf("Error checking auth selector '%s' for instance %s: %v", mapCfg[instanceName].Auth.Check, instanceName, err)
+								}
+							} else if len(nodes) == 0 {
+								log.Debugf("Auth.Check selector '%s' not found for instance %s. Skipping state save.", mapCfg[instanceName].Auth.Check, instanceName)
 							} else {
-								lastModified := fileInfo.ModTime()
-								now := time.Now()
-								duration := now.Sub(lastModified)
-								if duration > 30*time.Second {
-									saveState = true
-								}
+								hasCheckFlag = true
+								log.Debugf("Auth.Check selector '%s' found %d elements for instance %s.", mapCfg[instanceName].Auth.Check, len(nodes), instanceName)
 							}
 
-							if saveState {
-								cookies, errGetCookies := chromedpmanager.GetCookies(pageInstance.GetContext())
-								localStorages, errGetLocalStorages := chromedpmanager.GetLocalStorages(pageInstance.GetContext())
-								// localStorages, errGetLocalStorages := pageInstance.GetLocalStorages()
-								if errGetCookies != nil {
-									log.Debugf("Error getting cookies for instance %s: %v", instanceName, errGetCookies)
-									continue
-								}
-								if errGetLocalStorages != nil {
-									log.Debugf("Error getting local storages for instance %s: %v", instanceName, errGetLocalStorages)
-									continue
-								}
-
-								jsonData, errMarshalIndent := json.MarshalIndent(map[string]interface{}{"cookies": cookies, "local_storage": localStorages}, "", "  ")
-								if errMarshalIndent != nil {
-									log.Debugf("Error marshalling cookies to JSON for instance %s: %v", instanceName, errMarshalIndent)
-									continue
-								}
-
-								// Ensure the directory exists
-								authAbsPath, errAbs := filepath.Abs(mapCfg[instanceName].Auth.File)
-								if errAbs != nil {
-									log.Debugf("Error getting absolute path for auth file for instance %s: %v", instanceName, errAbs)
-									continue
-								}
-								authDirName := filepath.Dir(authAbsPath)
-								if _, errStat := os.Stat(authDirName); os.IsNotExist(errStat) {
-									errMkdir := os.MkdirAll(authDirName, 0755)
-									if errMkdir != nil {
-										log.Debugf("Error creating directory %s for instance %s: %v", authDirName, instanceName, errMkdir)
-										continue
-									}
-								}
-
-								if _, errStat := os.Stat(mapCfg[instanceName].Auth.File); !os.IsNotExist(errStat) {
-									authData, errReadFile := os.ReadFile(mapCfg[instanceName].Auth.File)
-									if errReadFile != nil {
-										log.Debugf("Error reading auth info to file %s for instance %s: %v", mapCfg[instanceName].Auth.File, instanceName, errReadFile)
-										continue
-									}
-									if md5.Sum(authData) == md5.Sum(jsonData) {
-										log.Debugf("Auth info for instance %s is up to date, skipping write", instanceName)
-										continue
-									}
-								}
-
-								errWriteFile := os.WriteFile(mapCfg[instanceName].Auth.File, jsonData, 0644)
-								if errWriteFile != nil {
-									log.Debugf("Error writing auth info to file %s for instance %s: %v", mapCfg[instanceName].Auth.File, instanceName, errWriteFile)
+							if hasCheckFlag {
+								saveState := false
+								if fileInfo, errStat := os.Stat(mapCfg[instanceName].Auth.Files[i]); os.IsNotExist(errStat) {
+									saveState = true
 								} else {
-									log.Debugf("Successfully wrote auth info to file %s for instance %s", mapCfg[instanceName].Auth.File, instanceName)
+									lastModified := fileInfo.ModTime()
+									now := time.Now()
+									duration := now.Sub(lastModified)
+									if duration > 30*time.Second {
+										saveState = true
+									}
+								}
+
+								if saveState {
+									cookies, errGetCookies := chromedpmanager.GetCookies(pageInstance.GetContext())
+									localStorages, errGetLocalStorages := chromedpmanager.GetLocalStorages(pageInstance.GetContext())
+									// localStorages, errGetLocalStorages := pageInstance.GetLocalStorages()
+									if errGetCookies != nil {
+										log.Debugf("Error getting cookies for instance %s: %v", instanceName, errGetCookies)
+										continue
+									}
+									if errGetLocalStorages != nil {
+										log.Debugf("Error getting local storages for instance %s: %v", instanceName, errGetLocalStorages)
+										continue
+									}
+
+									jsonData, errMarshalIndent := json.MarshalIndent(map[string]interface{}{"cookies": cookies, "local_storage": localStorages}, "", "  ")
+									if errMarshalIndent != nil {
+										log.Debugf("Error marshalling cookies to JSON for instance %s: %v", instanceName, errMarshalIndent)
+										continue
+									}
+
+									// Ensure the directory exists
+									authAbsPath, errAbs := filepath.Abs(mapCfg[instanceName].Auth.Files[i])
+									if errAbs != nil {
+										log.Debugf("Error getting absolute path for auth file for instance %s: %v", instanceName, errAbs)
+										continue
+									}
+									authDirName := filepath.Dir(authAbsPath)
+									if _, errStat := os.Stat(authDirName); os.IsNotExist(errStat) {
+										errMkdir := os.MkdirAll(authDirName, 0755)
+										if errMkdir != nil {
+											log.Debugf("Error creating directory %s for instance %s: %v", authDirName, instanceName, errMkdir)
+											continue
+										}
+									}
+
+									if _, errStat := os.Stat(mapCfg[instanceName].Auth.Files[i]); !os.IsNotExist(errStat) {
+										authData, errReadFile := os.ReadFile(mapCfg[instanceName].Auth.Files[i])
+										if errReadFile != nil {
+											log.Debugf("Error reading auth info to file %s for instance %s: %v", mapCfg[instanceName].Auth.Files[i], instanceName, errReadFile)
+											continue
+										}
+										if md5.Sum(authData) == md5.Sum(jsonData) {
+											log.Debugf("Auth info for instance %s is up to date, skipping write", instanceName)
+											continue
+										}
+									}
+
+									errWriteFile := os.WriteFile(mapCfg[instanceName].Auth.Files[i], jsonData, 0644)
+									if errWriteFile != nil {
+										log.Debugf("Error writing auth info to file %s for instance %s: %v", mapCfg[instanceName].Auth.Files[i], instanceName, errWriteFile)
+									} else {
+										log.Debugf("Successfully wrote auth info to file %s for instance %s", mapCfg[instanceName].Auth.Files[i], instanceName)
+									}
 								}
 							}
 						}

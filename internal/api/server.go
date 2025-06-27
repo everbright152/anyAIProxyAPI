@@ -25,7 +25,7 @@ type Server struct {
 type ServerConfig struct {
 	Port  string
 	Debug bool
-	Pages *map[string]*chrome.Page
+	Pages *map[string][]*chrome.Page
 }
 
 // NewServer creates a new API server instance
@@ -85,7 +85,6 @@ func (s *Server) setupRoutes() {
 		// Auth management routes
 		v1.GET("/auth/upload", s.handlers.AuthUploadPage)
 		v1.POST("/auth/upload", s.handlers.AuthUpload)
-		v1.GET("/auth/download", s.handlers.AuthDownload)
 		v1.GET("/auth/instances", s.handlers.AuthInstances)
 	}
 
