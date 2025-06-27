@@ -46,13 +46,13 @@ func NewManager(appConfig *config.AppConfig, indies ...int) (*Manager, error) {
 		// chromedp.Flag("disable-background-timer-throttling", true),
 		// chromedp.Flag("disable-backgrounding-occluded-windows", true),
 		// chromedp.Flag("disable-renderer-backgrounding", true),
-		// chromedp.Flag("disable-infobars", true),      // 禁用 "Chrome is being controlled by automated test software"
-		// chromedp.Flag("disable-breakpad", true),      // 禁用崩溃报告
-		// chromedp.Flag("disable-dev-shm-usage", true), // 在 Docker 或 CI 环境中通常需要
+		// chromedp.Flag("disable-infobars", true),      // Disable "Chrome is being controlled by automated test software"
+		// chromedp.Flag("disable-breakpad", true),      // Disable crash reports
+		// chromedp.Flag("disable-dev-shm-usage", true), // Often needed in Docker or CI environments
 		// chromedp.Flag("disable-extensions", true),
 		// chromedp.Flag("mute-audio", true),
-		// chromedp.Flag("headless", true), // 默认非无头，可以根据配置添加
-		// chromedp.Flag("remote-debugging-port", "9222"), // 如果需要远程调试
+		// chromedp.Flag("headless", true), // Default is not headless, can be added based on configuration
+		// chromedp.Flag("remote-debugging-port", "9222"), // If remote debugging is needed
 	}
 
 	if len(indies) > 0 {
