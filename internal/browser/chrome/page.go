@@ -32,6 +32,7 @@ type Page struct {
 	URL          string
 	alive        bool
 	Error        chan error
+	IsErrorCheck bool
 }
 
 func NewPage(manager *Manager, adapterName string, url string, authFilePath string, pageLoaded func(), sniffURLs ...[]string) (*Page, error) {

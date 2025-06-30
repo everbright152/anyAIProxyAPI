@@ -326,6 +326,8 @@ func (h *APIHandlers) handleContextCanceled(instanceIndex int, page *chrome.Page
 		log.Error(err)
 		return
 	}
+
+	r.SetVariable("PAGE", page, "ptr")
 	err = r.Run("context_canceled")
 	if err != nil {
 		log.Error(err)

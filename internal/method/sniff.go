@@ -22,3 +22,11 @@ func (m *Method) ResponseData(page *chrome.Page, channel chan *adapter.AdapterRe
 func (m *Method) ResponseError(page *chrome.Page, err string) {
 	page.Error <- fmt.Errorf(err)
 }
+
+func (m *Method) StartErrorCheck(page *chrome.Page) {
+	page.IsErrorCheck = true
+}
+
+func (m *Method) StopErrorCheck(page *chrome.Page) {
+	page.IsErrorCheck = false
+}

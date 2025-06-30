@@ -57,9 +57,11 @@ func NewRunnerManager(appConfigInstance config.AppConfigInstance, page *chrome.P
 			go func() {
 				for page.Alive() {
 					time.Sleep(1 * time.Second)
-					err = runner.Run("error_check")
-					if err != nil {
-						log.Debugf("error_check failed: %v", err)
+					if page.IsErrorCheck {
+						err = runner.Run("error_check")
+						if err != nil {
+							log.Debugf("error_check failed: %v", err)
+						}
 					}
 				}
 			}()
